@@ -119,12 +119,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libasound2-dev libopenblas-dev libx11-dev libxtst-dev libxrandr-dev
 
-      - name: Install Vulkan SDK (Windows x64)
-        if: contains(inputs.platform, 'windows') && !contains(inputs.target, 'aarch64')
-        uses: humbletim/install-vulkan-sdk@v1.2
-        with:
-          version: 1.4.309.0
-          cache: true
+      # Vulkan SDK installation disabled to avoid path length issues
+      # - name: Install Vulkan SDK (Windows x64)
+      #   if: contains(inputs.platform, 'windows') && !contains(inputs.target, 'aarch64')
+      #   uses: humbletim/install-vulkan-sdk@v1.2
+      #   with:
+      #     version: 1.4.309.0
+      #     cache: true
 
       # humbletim/install-vulkan-sdk@v1.2 cannot target Windows ARM64 yet.
       # Download prebuilt binaries (Bin) + build headers/libs from source.
