@@ -13,8 +13,8 @@ pub struct AudioVisualiser {
     fft_input: Vec<Complex32>,
     noise_floor: Vec<f32>,
     buffer: Vec<f32>,
+    bucket_output: Vec<f32>, // Pre-allocated output buffer
     window_size: usize,
-    buckets: usize,
 }
 
 impl AudioVisualiser {
@@ -72,8 +72,8 @@ impl AudioVisualiser {
             fft_input: vec![Complex32::new(0.0, 0.0); window_size],
             noise_floor: vec![-40.0; buckets], // Initialize to reasonable noise floor
             buffer: Vec::with_capacity(window_size * 2),
+            bucket_output: vec![0.0; buckets], // Pre-allocate output buffer
             window_size,
-            buckets,
         }
     }
 
@@ -101,8 +101,8 @@ impl AudioVisualiser {
         // Perform FFT
         self.fft.process(&mut self.fft_input);
 
-        // Compute power spectrum and bucket levels
-        let mut buckets = vec![0.0; self.buckets];
+        // Compute power spectrum and bucket levels (reuse pre-allocated buffer)
+        self.bucket_output.fill(0.0);
 
         for (bucket_idx, &(start_bin, end_bin)) in self.bucket_ranges.iter().enumerate() {
             if start_bin >= end_bin || end_bin > self.fft_input.len() / 2 {
@@ -134,18 +134,21 @@ impl AudioVisualiser {
 
             // Map configurable dB range to 0-1 with gain and curve shaping
             let normalized = ((db - DB_MIN) / (DB_MAX - DB_MIN)).clamp(0.0, 1.0);
-            buckets[bucket_idx] = (normalized * GAIN).powf(CURVE_POWER).clamp(0.0, 1.0);
+            self.bucket_output[bucket_idx] = (normalized * GAIN).powf(CURVE_POWER).clamp(0.0, 1.0);
         }
 
-        // Apply light smoothing to reduce jitter
-        for i in 1..buckets.len() - 1 {
-            buckets[i] = buckets[i] * 0.7 + buckets[i - 1] * 0.15 + buckets[i + 1] * 0.15;
+        // Apply light smoothing to reduce jitter (in-place)
+        for i in 1..self.bucket_output.len() - 1 {
+            let smoothed = self.bucket_output[i] * 0.7
+                + self.bucket_output[i - 1] * 0.15
+                + self.bucket_output[i + 1] * 0.15;
+            self.bucket_output[i] = smoothed;
         }
 
         // Clear processed samples from buffer
         self.buffer.clear();
 
-        Some(buckets)
+        Some(self.bucket_output.clone())
     }
 
     pub fn reset(&mut self) {

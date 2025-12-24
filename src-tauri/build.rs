@@ -112,6 +112,7 @@ fn escape_string(s: &str) -> String {
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[allow(dead_code)]
 fn build_apple_intelligence_bridge() {
     use std::env;
     use std::path::{Path, PathBuf};

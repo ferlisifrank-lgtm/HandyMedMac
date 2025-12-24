@@ -1,29 +1,32 @@
 // Medical vocabulary processor for Canadian family medicine
 // File: src-tauri/src/medical_vocab.rs
 
+use log::{debug, info};
+use once_cell::sync::Lazy;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use serde::{Deserialize, Serialize};
-use log::{debug, info};
-use once_cell::sync::Lazy;
 
 // Pre-compiled regex patterns for medical numbers (compiled once, used many times)
 static BP_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b(blood pressure|BP|B P)\s+(one hundred \w+|one \w+|\w+)\s+over\s+(\w+\s?\w*)\b").unwrap()
+    Regex::new(
+        r"(?i)\b(blood pressure|BP|B P)\s+(one hundred \w+|one \w+|\w+)\s+over\s+(\w+\s?\w*)\b",
+    )
+    .unwrap()
 });
 
-static HR_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b(heart rate|HR|H R)\s+(\w+\s?\w*)\b").unwrap()
-});
+static HR_PATTERN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)\b(heart rate|HR|H R)\s+(\w+\s?\w*)\b").unwrap());
 
 static RR_PATTERN: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(?i)\b(respiratory rate|RR|R R|respiration rate)\s+(\w+\s?\w*)\b").unwrap()
 });
 
 static O2_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(?i)\b(oxygen saturation|O2 sat|O2sat|oxygen sat)\s+(\w+\s?\w*)\s*percent\b").unwrap()
+    Regex::new(r"(?i)\b(oxygen saturation|O2 sat|O2sat|oxygen sat)\s+(\w+\s?\w*)\s*percent\b")
+        .unwrap()
 });
 
 static TEMP_PATTERN: Lazy<Regex> = Lazy::new(|| {
@@ -59,6 +62,7 @@ impl MedicalVocabulary {
         vocab
     }
 
+    #[allow(dead_code)]
     pub fn with_custom_vocab(custom_vocab_path: PathBuf) -> Self {
         let mut vocab = Self::new();
         vocab.custom_vocab_path = Some(custom_vocab_path.clone());
@@ -139,22 +143,22 @@ esophagus -> oesophagus
         match fs::read_to_string(path) {
             Ok(contents) => {
                 info!("Loading custom vocabulary from: {:?}", path);
-                
+
                 for line in contents.lines() {
                     let line = line.trim();
-                    
+
                     if line.is_empty() || line.starts_with('#') {
                         continue;
                     }
-                    
+
                     if line.contains("->") {
                         let parts: Vec<&str> = line.split("->").collect();
                         if parts.len() == 2 {
                             let wrong = parts[0].trim().to_string();
                             let correct = parts[1].trim().to_string();
-                            
+
                             let wrong_words = wrong.split_whitespace().count();
-                            
+
                             if wrong_words == 1 {
                                 self.canadian_spellings.insert(wrong, correct);
                             } else {
@@ -206,7 +210,8 @@ esophagus -> oesophagus
         ];
 
         for (us, ca) in canadian_spellings {
-            self.canadian_spellings.insert(us.to_string(), ca.to_string());
+            self.canadian_spellings
+                .insert(us.to_string(), ca.to_string());
         }
 
         self.common_corrections.insert(
@@ -258,7 +263,10 @@ esophagus -> oesophagus
 
         let medications = vec![
             ("metformin", vec!["met formin", "metform in"]),
-            ("lisinopril", vec!["lysinopril", "liz in o pril", "lisenopril"]),
+            (
+                "lisinopril",
+                vec!["lysinopril", "liz in o pril", "lisenopril"],
+            ),
             ("atorvastatin", vec!["a tor va statin", "ator vastatin"]),
             ("amlodipine", vec!["am low di peen", "amlodipeen"]),
             ("levothyroxine", vec!["levo thyroxine", "levo thyro xine"]),
@@ -271,34 +279,107 @@ esophagus -> oesophagus
 
         for (correct, variants) in medications {
             for variant in variants {
-                self.medication_corrections.insert(variant.to_string(), correct.to_string());
+                self.medication_corrections
+                    .insert(variant.to_string(), correct.to_string());
             }
         }
 
         self.add_terms(&[
-            "hypertension", "diabetes", "asthma", "COPD", "arthritis",
-            "atrial fibrillation", "pneumonia", "bronchitis", "GERD",
-            "hypothyroidism", "hyperthyroidism", "osteoporosis", "osteoarthritis",
-            "hyperlipidemia", "hypercholesterolemia", "dyslipidemia",
-            "angina", "myocardial infarction", "stroke", "TIA",
-            "depression", "anxiety", "insomnia",
-            "metformin", "lisinopril", "atorvastatin", "amlodipine",
-            "levothyroxine", "omeprazole", "acetaminophen", "ibuprofen",
-            "salbutamol", "ramipril", "rosuvastatin", "pantoprazole",
-            "citalopram", "escitalopram", "sertraline", "venlafaxine",
-            "gabapentin", "pregabalin", "tramadol", "codeine",
-            "Tylenol", "Advil", "Lipitor", "Synthroid", "Ventolin",
-            "OHIP", "MSP", "RAMQ", "health card", "family physician",
-            "ECG", "electrocardiogram", "X-ray", "ultrasound", "CT scan",
-            "MRI", "blood pressure", "heart rate", "respiratory rate",
-            "blood work", "urinalysis", "CBC", "complete blood count",
-            "lipid panel", "A1C", "hemoglobin A1C", "TSH", "INR",
-            "chest pain", "shortness of breath", "dyspnea", "wheezing",
-            "cough", "fever", "nausea", "vomiting", "diarrhea",
-            "headache", "dizziness", "fatigue", "malaise",
-            "milligrams", "micrograms", "milliliters", "units",
-            "once daily", "twice daily", "three times daily",
-            "as needed", "prn", "with food", "on empty stomach",
+            "hypertension",
+            "diabetes",
+            "asthma",
+            "COPD",
+            "arthritis",
+            "atrial fibrillation",
+            "pneumonia",
+            "bronchitis",
+            "GERD",
+            "hypothyroidism",
+            "hyperthyroidism",
+            "osteoporosis",
+            "osteoarthritis",
+            "hyperlipidemia",
+            "hypercholesterolemia",
+            "dyslipidemia",
+            "angina",
+            "myocardial infarction",
+            "stroke",
+            "TIA",
+            "depression",
+            "anxiety",
+            "insomnia",
+            "metformin",
+            "lisinopril",
+            "atorvastatin",
+            "amlodipine",
+            "levothyroxine",
+            "omeprazole",
+            "acetaminophen",
+            "ibuprofen",
+            "salbutamol",
+            "ramipril",
+            "rosuvastatin",
+            "pantoprazole",
+            "citalopram",
+            "escitalopram",
+            "sertraline",
+            "venlafaxine",
+            "gabapentin",
+            "pregabalin",
+            "tramadol",
+            "codeine",
+            "Tylenol",
+            "Advil",
+            "Lipitor",
+            "Synthroid",
+            "Ventolin",
+            "OHIP",
+            "MSP",
+            "RAMQ",
+            "health card",
+            "family physician",
+            "ECG",
+            "electrocardiogram",
+            "X-ray",
+            "ultrasound",
+            "CT scan",
+            "MRI",
+            "blood pressure",
+            "heart rate",
+            "respiratory rate",
+            "blood work",
+            "urinalysis",
+            "CBC",
+            "complete blood count",
+            "lipid panel",
+            "A1C",
+            "hemoglobin A1C",
+            "TSH",
+            "INR",
+            "chest pain",
+            "shortness of breath",
+            "dyspnea",
+            "wheezing",
+            "cough",
+            "fever",
+            "nausea",
+            "vomiting",
+            "diarrhea",
+            "headache",
+            "dizziness",
+            "fatigue",
+            "malaise",
+            "milligrams",
+            "micrograms",
+            "milliliters",
+            "units",
+            "once daily",
+            "twice daily",
+            "three times daily",
+            "as needed",
+            "prn",
+            "with food",
+            "on empty stomach",
         ]);
 
         if let Some(path) = self.custom_vocab_path.clone() {
@@ -318,29 +399,29 @@ esophagus -> oesophagus
 
     pub fn process_text(&mut self, text: &str) -> String {
         let mut processed = text.to_string();
-        
+
         for (wrong, correct) in &self.medication_corrections.clone() {
             processed = self.replace_case_insensitive(&processed, wrong, correct);
         }
-        
+
         for (correct, variants) in &self.common_corrections.clone() {
             for variant in variants {
                 processed = self.replace_case_insensitive(&processed, variant, correct);
             }
         }
-        
+
         for (us_spelling, ca_spelling) in &self.canadian_spellings.clone() {
             processed = self.replace_word_boundary(&processed, us_spelling, ca_spelling);
         }
-        
+
         processed = self.format_medical_numbers(&processed);
-        
+
         processed
     }
 
     fn replace_case_insensitive(&mut self, text: &str, pattern: &str, replacement: &str) -> String {
         let cache_key = format!("ci:{}", pattern);
-        
+
         if !self.regex_cache.contains_key(&cache_key) {
             let regex_pattern = format!(r"(?i)\b{}\b", regex::escape(pattern));
             if let Ok(re) = Regex::new(&regex_pattern) {
@@ -349,7 +430,7 @@ esophagus -> oesophagus
                 return text.to_string();
             }
         }
-        
+
         if let Some(re) = self.regex_cache.get(&cache_key) {
             re.replace_all(text, replacement).to_string()
         } else {
@@ -359,7 +440,7 @@ esophagus -> oesophagus
 
     fn replace_word_boundary(&mut self, text: &str, pattern: &str, replacement: &str) -> String {
         let cache_key = format!("wb:{}", pattern);
-        
+
         if !self.regex_cache.contains_key(&cache_key) {
             let regex_pattern = format!(r"\b{}\b", regex::escape(pattern));
             if let Ok(re) = Regex::new(&regex_pattern) {
@@ -368,7 +449,7 @@ esophagus -> oesophagus
                 return text.to_string();
             }
         }
-        
+
         if let Some(re) = self.regex_cache.get(&cache_key) {
             re.replace_all(text, replacement).to_string()
         } else {
@@ -378,82 +459,135 @@ esophagus -> oesophagus
 
     fn format_medical_numbers(&self, text: &str) -> String {
         let mut processed = text.to_string();
-        
+
         // Number mappings
         let number_map: HashMap<&str, &str> = [
-            ("zero", "0"), ("one", "1"), ("two", "2"), ("three", "3"),
-            ("four", "4"), ("five", "5"), ("six", "6"), ("seven", "7"),
-            ("eight", "8"), ("nine", "9"), ("ten", "10"), ("eleven", "11"),
-            ("twelve", "12"), ("thirteen", "13"), ("fourteen", "14"),
-            ("fifteen", "15"), ("sixteen", "16"), ("seventeen", "17"),
-            ("eighteen", "18"), ("nineteen", "19"), ("twenty", "20"),
-            ("twenty five", "25"), ("thirty", "30"), ("thirty five", "35"),
-            ("forty", "40"), ("fifty", "50"), ("sixty", "60"),
-            ("seventy", "70"), ("seventy five", "75"), ("eighty", "80"),
-            ("ninety", "90"), ("ninety five", "95"), ("ninety eight", "98"),
-            ("ninety nine", "99"), ("one hundred", "100"),
-            ("one hundred twenty", "120"), ("one hundred thirty", "130"),
-            ("one hundred forty", "140"), ("one hundred fifty", "150"),
-            ("two hundred", "200"), ("five hundred", "500"), 
+            ("zero", "0"),
+            ("one", "1"),
+            ("two", "2"),
+            ("three", "3"),
+            ("four", "4"),
+            ("five", "5"),
+            ("six", "6"),
+            ("seven", "7"),
+            ("eight", "8"),
+            ("nine", "9"),
+            ("ten", "10"),
+            ("eleven", "11"),
+            ("twelve", "12"),
+            ("thirteen", "13"),
+            ("fourteen", "14"),
+            ("fifteen", "15"),
+            ("sixteen", "16"),
+            ("seventeen", "17"),
+            ("eighteen", "18"),
+            ("nineteen", "19"),
+            ("twenty", "20"),
+            ("twenty five", "25"),
+            ("thirty", "30"),
+            ("thirty five", "35"),
+            ("forty", "40"),
+            ("fifty", "50"),
+            ("sixty", "60"),
+            ("seventy", "70"),
+            ("seventy five", "75"),
+            ("eighty", "80"),
+            ("ninety", "90"),
+            ("ninety five", "95"),
+            ("ninety eight", "98"),
+            ("ninety nine", "99"),
+            ("one hundred", "100"),
+            ("one hundred twenty", "120"),
+            ("one hundred thirty", "130"),
+            ("one hundred forty", "140"),
+            ("one hundred fifty", "150"),
+            ("two hundred", "200"),
+            ("five hundred", "500"),
             ("one thousand", "1000"),
-        ].iter().copied().collect();
-        
+        ]
+        .iter()
+        .copied()
+        .collect();
+
         // VITAL SIGNS FORMATTING - using pre-compiled static regexes
-        
+
         // Blood Pressure
-        processed = BP_PATTERN.replace_all(&processed, |caps: &regex::Captures| {
-            let _prefix = caps.get(1).unwrap().as_str();
-            let systolic_word = caps.get(2).unwrap().as_str().to_lowercase();
-            let diastolic_word = caps.get(3).unwrap().as_str().to_lowercase();
-            
-            let systolic_binding = systolic_word.as_str();
-            let systolic = number_map.get(systolic_word.as_str()).unwrap_or(&systolic_binding);
-            let diastolic_binding = diastolic_word.as_str();
-            let diastolic = number_map.get(diastolic_word.as_str()).unwrap_or(&diastolic_binding);
-            
-            format!("BP {}/{}", systolic, diastolic)
-        }).to_string();
-        
+        processed = BP_PATTERN
+            .replace_all(&processed, |caps: &regex::Captures| {
+                let _prefix = caps.get(1).unwrap().as_str();
+                let systolic_word = caps.get(2).unwrap().as_str().to_lowercase();
+                let diastolic_word = caps.get(3).unwrap().as_str().to_lowercase();
+
+                let systolic_binding = systolic_word.as_str();
+                let systolic = number_map
+                    .get(systolic_word.as_str())
+                    .unwrap_or(&systolic_binding);
+                let diastolic_binding = diastolic_word.as_str();
+                let diastolic = number_map
+                    .get(diastolic_word.as_str())
+                    .unwrap_or(&diastolic_binding);
+
+                format!("BP {}/{}", systolic, diastolic)
+            })
+            .to_string();
+
         // Heart Rate
-        processed = HR_PATTERN.replace_all(&processed, |caps: &regex::Captures| {
-            let rate_word = caps.get(2).unwrap().as_str().to_lowercase();
-            let rate_binding = rate_word.as_str();
-            let rate = number_map.get(rate_word.as_str()).unwrap_or(&rate_binding);
-            format!("HR {}", rate)
-        }).to_string();
-        
+        processed = HR_PATTERN
+            .replace_all(&processed, |caps: &regex::Captures| {
+                let rate_word = caps.get(2).unwrap().as_str().to_lowercase();
+                let rate_binding = rate_word.as_str();
+                let rate = number_map.get(rate_word.as_str()).unwrap_or(&rate_binding);
+                format!("HR {}", rate)
+            })
+            .to_string();
+
         // Respiratory Rate
-        processed = RR_PATTERN.replace_all(&processed, |caps: &regex::Captures| {
-            let rate_word = caps.get(2).unwrap().as_str().to_lowercase();
-            let rate_binding = rate_word.as_str();
-            let rate = number_map.get(rate_word.as_str()).unwrap_or(&rate_binding);
-            format!("RR {}", rate)
-        }).to_string();
-        
+        processed = RR_PATTERN
+            .replace_all(&processed, |caps: &regex::Captures| {
+                let rate_word = caps.get(2).unwrap().as_str().to_lowercase();
+                let rate_binding = rate_word.as_str();
+                let rate = number_map.get(rate_word.as_str()).unwrap_or(&rate_binding);
+                format!("RR {}", rate)
+            })
+            .to_string();
+
         // Oxygen Saturation
-        processed = O2_PATTERN.replace_all(&processed, |caps: &regex::Captures| {
-            let sat_word = caps.get(2).unwrap().as_str().to_lowercase();
-            let sat_binding = sat_word.as_str();
-            let sat = number_map.get(sat_word.as_str()).unwrap_or(&sat_binding);
-            format!("O2 sat {}%", sat)
-        }).to_string();
-        
+        processed = O2_PATTERN
+            .replace_all(&processed, |caps: &regex::Captures| {
+                let sat_word = caps.get(2).unwrap().as_str().to_lowercase();
+                let sat_binding = sat_word.as_str();
+                let sat = number_map.get(sat_word.as_str()).unwrap_or(&sat_binding);
+                format!("O2 sat {}%", sat)
+            })
+            .to_string();
+
         // Temperature
-        processed = TEMP_PATTERN.replace_all(&processed, |caps: &regex::Captures| {
-            let tens = caps.get(2).unwrap().as_str().to_lowercase();
-            let ones = caps.get(3).map(|m| m.as_str().to_lowercase());
-            let decimal = caps.get(4).unwrap().as_str().to_lowercase();
-            
-            let tens_num = if tens == "thirty" { "3" } else if tens == "forty" { "4" } else { "" };
-            let ones_num = ones.as_ref().and_then(|o| number_map.get(o.as_str())).unwrap_or(&"");
-            let decimal_binding = decimal.as_str();
-            let decimal_num = number_map.get(decimal.as_str()).unwrap_or(&decimal_binding);
-            
-            format!("temp {}{}.{}°C", tens_num, ones_num, decimal_num)
-        }).to_string();
-        
+        processed = TEMP_PATTERN
+            .replace_all(&processed, |caps: &regex::Captures| {
+                let tens = caps.get(2).unwrap().as_str().to_lowercase();
+                let ones = caps.get(3).map(|m| m.as_str().to_lowercase());
+                let decimal = caps.get(4).unwrap().as_str().to_lowercase();
+
+                let tens_num = if tens == "thirty" {
+                    "3"
+                } else if tens == "forty" {
+                    "4"
+                } else {
+                    ""
+                };
+                let ones_num = ones
+                    .as_ref()
+                    .and_then(|o| number_map.get(o.as_str()))
+                    .unwrap_or(&"");
+                let decimal_binding = decimal.as_str();
+                let decimal_num = number_map.get(decimal.as_str()).unwrap_or(&decimal_binding);
+
+                format!("temp {}{}.{}°C", tens_num, ones_num, decimal_num)
+            })
+            .to_string();
+
         // LAB VALUE FORMATTING
-        
+
         // Common lab abbreviations
         let lab_corrections = vec![
             ("A one C", "A1C"),
@@ -475,39 +609,44 @@ esophagus -> oesophagus
             ("complete blood count", "CBC"),
             ("C reactive protein", "CRP"),
         ];
-        
+
         for (spoken, abbrev) in lab_corrections {
             let pattern = format!(r"(?i)\b{}\b", regex::escape(spoken));
             if let Ok(re) = Regex::new(&pattern) {
                 processed = re.replace_all(&processed, abbrev).to_string();
             }
         }
-        
+
         // MEDICATION UNITS - using pre-compiled static regex
-        processed = MED_UNITS_PATTERN.replace_all(&processed, |caps: &regex::Captures| {
-            let num_word = caps.get(1).unwrap().as_str().to_lowercase();
-            let unit = caps.get(2).unwrap().as_str().to_lowercase();
-            
-            let digit = number_map.get(num_word.as_str()).unwrap_or(&"");
-            
-            let abbrev = match unit.as_str() {
-                "kilogram" | "kilograms" | "kgs" | "kg" => "kg",
-                "milligram" | "milligrams" | "mgs" | "mg" => "mg",
-                "microgram" | "micrograms" | "mcgs" | "mcg" => "mcg",
-                "gram" | "grams" | "gms" | "g" => "g",
-                "milliliter" | "milliliters" | "millilitre" | "millilitres" | "mls" | "ml" => "mL",
-                "liter" | "liters" | "litre" | "litres" => "L",
-                "unit" | "units" => "units",
-                "percent" => "%",
-                _ => &unit,
-            };
-            
-            format!("{} {}", digit, abbrev)
-        }).to_string();
-        
+        processed = MED_UNITS_PATTERN
+            .replace_all(&processed, |caps: &regex::Captures| {
+                let num_word = caps.get(1).unwrap().as_str().to_lowercase();
+                let unit = caps.get(2).unwrap().as_str().to_lowercase();
+
+                let digit = number_map.get(num_word.as_str()).unwrap_or(&"");
+
+                let abbrev = match unit.as_str() {
+                    "kilogram" | "kilograms" | "kgs" | "kg" => "kg",
+                    "milligram" | "milligrams" | "mgs" | "mg" => "mg",
+                    "microgram" | "micrograms" | "mcgs" | "mcg" => "mcg",
+                    "gram" | "grams" | "gms" | "g" => "g",
+                    "milliliter" | "milliliters" | "millilitre" | "millilitres" | "mls" | "ml" => {
+                        "mL"
+                    }
+                    "liter" | "liters" | "litre" | "litres" => "L",
+                    "unit" | "units" => "units",
+                    "percent" => "%",
+                    _ => &unit,
+                };
+
+                format!("{} {}", digit, abbrev)
+            })
+            .to_string();
+
         processed
     }
 
+    #[allow(dead_code)]
     pub fn reload_custom_vocabulary(&mut self) {
         if let Some(path) = self.custom_vocab_path.clone() {
             info!("Reloading custom vocabulary from: {:?}", path);
@@ -554,7 +693,7 @@ mod tests {
         assert!(result.contains("metformin"));
         assert!(result.contains("lisinopril"));
     }
-    
+
     #[test]
     fn test_number_formatting() {
         let vocab = MedicalVocabulary::new();

@@ -19,10 +19,37 @@ export default defineConfig(async () => ({
 
   // Multiple entry points for main app and overlay
   build: {
+    // Production build optimizations
+    minify: "terser" as const,
+    terserOptions: {
+      compress: {
+        drop_console: true, // Remove console.logs in production
+        drop_debugger: true,
+        passes: 2, // Multiple passes for better compression
+      },
+    },
+    cssMinify: true,
+    reportCompressedSize: false, // Faster builds
+    chunkSizeWarningLimit: 1000, // Increase for large dependencies
+
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),
         overlay: resolve(__dirname, "src/overlay/index.html"),
+      },
+      output: {
+        // Manual chunks for better code splitting and caching
+        manualChunks: {
+          // Vendor chunks
+          "react-vendor": ["react", "react-dom", "react/jsx-runtime"],
+          "tauri-vendor": ["@tauri-apps/api", "@tauri-apps/plugin-store"],
+          // UI library chunks
+          "ui-vendor": ["zustand", "react-i18next", "i18next"],
+        },
+        // Optimize chunk file names
+        chunkFileNames: "assets/js/[name]-[hash].js",
+        entryFileNames: "assets/js/[name]-[hash].js",
+        assetFileNames: "assets/[ext]/[name]-[hash].[ext]",
       },
     },
   },
