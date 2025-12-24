@@ -127,31 +127,15 @@ jobs:
       #     version: 1.4.309.0
       #     cache: true
 
-      # Create dummy Vulkan SDK to satisfy CMake FindVulkan checks
+      # Create dummy Vulkan SDK dir to satisfy whisper-rs-sys build check
       - name: Create dummy Vulkan SDK (Windows)
-        if: contains(inputs.platform, 'windows') && !contains(inputs.target, 'aarch64')
+        if: contains(inputs.platform, 'windows')
         shell: pwsh
         run: |
-          # Create full dummy Vulkan SDK structure
-          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\1.0.0\Bin" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\1.0.0\Lib" | Out-Null
-          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\1.0.0\Include\vulkan" | Out-Null
-
-          # Create dummy vulkan-1.lib
-          New-Item -ItemType File -Force -Path "C:\VulkanSDK\1.0.0\Lib\vulkan-1.lib" | Out-Null
-
-          # Create dummy glslc.exe (CMake checks for this)
-          @"
-          @echo off
-          echo glslc fake 1.0.0
-          "@ | Out-File -FilePath "C:\VulkanSDK\1.0.0\Bin\glslc.exe" -Encoding ASCII
-
-          # Create minimal vulkan.h header
-          New-Item -ItemType File -Force -Path "C:\VulkanSDK\1.0.0\Include\vulkan\vulkan.h" | Out-Null
-
-          # Add Bin directory to PATH
-          Add-Content -Path $env:GITHUB_PATH -Value "C:\VulkanSDK\1.0.0\Bin"
-          Write-Host "Added C:\VulkanSDK\1.0.0\Bin to PATH"
+          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Lib" | Out-Null
+          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Include" | Out-Null
+          # Create dummy vulkan-1.lib so linker check passes
+          New-Item -ItemType File -Force -Path "C:\VulkanSDK\Lib\vulkan-1.lib" | Out-Null
 
       # humbletim/install-vulkan-sdk@v1.2 cannot target Windows ARM64 yet.
       # Download prebuilt binaries (Bin) + build headers/libs from source.
@@ -286,7 +270,7 @@ jobs:
           GGML_VULKAN: ${{ contains(inputs.platform, 'windows') && 'OFF' || '' }}
           GGML_CUDA: ${{ contains(inputs.platform, 'windows') && 'OFF' || '' }}
           GGML_METAL: ${{ contains(inputs.platform, 'windows') && 'OFF' || '' }}
-          VULKAN_SDK: ${{ contains(inputs.platform, 'windows') && !contains(inputs.target, 'aarch64') && 'C:\\VulkanSDK\\1.0.0' || '' }}
+          VULKAN_SDK: ${{ contains(inputs.platform, 'windows') && 'C:\\VulkanSDK' || '' }}
         with:
           tagName: ${{ inputs.release-id && format('v{0}', steps.get-version.outputs.version) || '' }}
           releaseName: ${{ inputs.release-id && format('v{0}', steps.get-version.outputs.version) || '' }}
