@@ -1,12 +1,12 @@
+# Cargo build configuration for HandyMed
+# Disables Vulkan to avoid Windows path length issues
+
 [env]
-MACOSX_DEPLOYMENT_TARGET = "15.0"
-CMAKE_OSX_DEPLOYMENT_TARGET = "15.0"
-CFLAGS = "-mmacosx-version-min=15.0"
-CXXFLAGS = "-mmacosx-version-min=15.0 -std=c++17"
-LDFLAGS = "-mmacosx-version-min=15.0"
+# Disable all GPU backends for whisper-rs-sys on Windows  
+GGML_VULKAN = { value = "OFF", condition = { target_os = "windows" } }
+GGML_CUDA = { value = "OFF", condition = { target_os = "windows" } }
+GGML_METAL = { value = "OFF", condition = { target_os = "windows" } }
+WHISPER_NO_GPU = { value = "1", condition = { target_os = "windows" } }
 
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-mmacosx-version-min=15.0"]
-
-[target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-cpu=native", "-C", "target-feature=+avx2"]
+# Force CMake to skip Vulkan
+CMAKE_ARGS = { value = "-DGGML_VULKAN=OFF", condition = { target_os = "windows" } }
