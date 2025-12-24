@@ -6,9 +6,8 @@ use std::collections::HashMap;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
-// Commented out Apple Intelligence constants
-// pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
-// pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
+pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
+pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
 
 #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "lowercase")]
@@ -294,8 +293,6 @@ pub struct AppSettings {
     pub append_trailing_space: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
-#[serde(default = "default_medical_mode_enabled")]
-    pub medical_mode_enabled: bool,
 }
 
 fn default_model() -> String {
@@ -365,11 +362,6 @@ fn default_post_process_enabled() -> bool {
     false
 }
 
-fn default_medical_mode_enabled() -> bool {
-    true
-}
-
-
 fn default_app_language() -> String {
     tauri_plugin_os::locale()
         .and_then(|l| l.split(['-', '_']).next().map(String::from))
@@ -381,7 +373,7 @@ fn default_post_process_provider_id() -> String {
 }
 
 fn default_post_process_providers() -> Vec<PostProcessProvider> {
-    vec![
+    let mut providers = vec![
         PostProcessProvider {
             id: "openai".to_string(),
             label: "OpenAI".to_string(),
@@ -410,8 +402,22 @@ fn default_post_process_providers() -> Vec<PostProcessProvider> {
             allow_base_url_edit: true,
             models_endpoint: Some("/models".to_string()),
         },
-    ]
-    // Apple Intelligence provider removed - not supported on this macOS version
+    ];
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        if crate::apple_intelligence::check_apple_intelligence_availability() {
+            providers.push(PostProcessProvider {
+                id: APPLE_INTELLIGENCE_PROVIDER_ID.to_string(),
+                label: "Apple Intelligence".to_string(),
+                base_url: "apple-intelligence://local".to_string(),
+                allow_base_url_edit: false,
+                models_endpoint: None,
+            });
+        }
+    }
+
+    providers
 }
 
 fn default_post_process_api_keys() -> HashMap<String, String> {
@@ -422,8 +428,10 @@ fn default_post_process_api_keys() -> HashMap<String, String> {
     map
 }
 
-fn default_model_for_provider(_provider_id: &str) -> String {
-    // Apple Intelligence handling removed
+fn default_model_for_provider(provider_id: &str) -> String {
+    if provider_id == APPLE_INTELLIGENCE_PROVIDER_ID {
+        return APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string();
+    }
     String::new()
 }
 
@@ -506,7 +514,6 @@ pub fn get_default_settings() -> AppSettings {
             description: "Converts your speech into text.".to_string(),
             default_binding: default_shortcut.to_string(),
             current_binding: default_shortcut.to_string(),
-
         },
     );
     bindings.insert(
@@ -556,7 +563,6 @@ pub fn get_default_settings() -> AppSettings {
         mute_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),
- 	medical_mode_enabled: true,
     }
 }
 

@@ -1,6 +1,6 @@
 fn main() {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    build_apple_intelligence_bridge();
+    //    // #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    //     //build_apple_intelligence_bridge();
 
     generate_tray_translations();
 

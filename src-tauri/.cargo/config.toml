@@ -1,0 +1,12 @@
+[env]
+MACOSX_DEPLOYMENT_TARGET = "15.0"
+CMAKE_OSX_DEPLOYMENT_TARGET = "15.0"
+CFLAGS = "-mmacosx-version-min=15.0"
+CXXFLAGS = "-mmacosx-version-min=15.0 -std=c++17"
+LDFLAGS = "-mmacosx-version-min=15.0"
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-mmacosx-version-min=15.0"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-cpu=native", "-C", "target-feature=+avx2"]

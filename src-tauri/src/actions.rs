@@ -1,10 +1,11 @@
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-use crate::apple_intelligence;
+use crate::medical_vocab::MedicalVocabulary;
+// // // #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+// // // use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
-use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
+use crate::settings::{get_settings, AppSettings};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{self, show_recording_overlay, show_transcribing_overlay};
@@ -97,41 +98,10 @@ async fn maybe_post_process_transcription(
     let processed_prompt = prompt.replace("${output}", transcription);
     debug!("Processed prompt length: {} chars", processed_prompt.len());
 
-    if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        {
-            if !apple_intelligence::check_apple_intelligence_availability() {
-                debug!("Apple Intelligence selected but not currently available on this device");
-                return None;
-            }
-
-            let token_limit = model.trim().parse::<i32>().unwrap_or(0);
-            return match apple_intelligence::process_text(&processed_prompt, token_limit) {
-                Ok(result) => {
-                    if result.trim().is_empty() {
-                        debug!("Apple Intelligence returned an empty response");
-                        None
-                    } else {
-                        debug!(
-                            "Apple Intelligence post-processing succeeded. Output length: {} chars",
-                            result.len()
-                        );
-                        Some(result)
-                    }
-                }
-                Err(err) => {
-                    error!("Apple Intelligence post-processing failed: {}", err);
-                    None
-                }
-            };
-        }
-
-        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-        {
-            debug!("Apple Intelligence provider selected on unsupported platform");
-            return None;
-        }
-    }
+ // Apple Intelligence removed - not supported on this macOS version
+// if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
+//     ...entire block commented out...
+// }
 
     let api_key = settings
         .post_process_api_keys
@@ -363,6 +333,12 @@ impl ShortcutAction for TranscribeAction {
                         if !transcription.is_empty() {
                             let settings = get_settings(&ah);
                             let mut final_text = transcription.clone();
+
+           // Apply medical vocabulary processing if enabled
+            if settings.medical_mode_enabled {
+                let mut medical_vocab = MedicalVocabulary::new();
+                final_text = medical_vocab.process_text(&final_text);
+            }
                             let mut post_processed_text: Option<String> = None;
                             let mut post_process_prompt: Option<String> = None;
 

@@ -1,6 +1,6 @@
 mod actions;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-mod apple_intelligence;
+// mod apple_intelligence;
 mod audio_feedback;
 pub mod audio_toolkit;
 mod clipboard;
@@ -16,6 +16,7 @@ mod signal_handle;
 mod tray;
 mod tray_i18n;
 mod utils;
+mod medical_vocab;
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, Builder};
 
@@ -277,6 +278,8 @@ pub fn run() {
         commands::models::get_available_models,
         commands::models::get_model_info,
         commands::models::download_model,
+	commands::medical::get_custom_vocab_path,
+        commands::medical::open_custom_vocab_file,
         commands::models::delete_model,
         commands::models::cancel_download,
         commands::models::set_active_model,
