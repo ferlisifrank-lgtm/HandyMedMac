@@ -127,6 +127,16 @@ jobs:
       #     version: 1.4.309.0
       #     cache: true
 
+      # Create dummy Vulkan SDK dir to satisfy whisper-rs-sys build check
+      - name: Create dummy Vulkan SDK (Windows)
+        if: contains(inputs.platform, 'windows')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Lib" | Out-Null
+          New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Include" | Out-Null
+          # Create dummy vulkan-1.lib so linker check passes
+          New-Item -ItemType File -Force -Path "C:\VulkanSDK\Lib\vulkan-1.lib" | Out-Null
+
       # humbletim/install-vulkan-sdk@v1.2 cannot target Windows ARM64 yet.
       # Download prebuilt binaries (Bin) + build headers/libs from source.
       # See https://github.com/humbletim/install-vulkan-sdk/pull/22 for prebuilt ARM64 support progress.
@@ -260,6 +270,7 @@ jobs:
           GGML_VULKAN: ${{ contains(inputs.platform, 'windows') && 'OFF' || '' }}
           GGML_CUDA: ${{ contains(inputs.platform, 'windows') && 'OFF' || '' }}
           GGML_METAL: ${{ contains(inputs.platform, 'windows') && 'OFF' || '' }}
+          VULKAN_SDK: ${{ contains(inputs.platform, 'windows') && 'C:\\VulkanSDK' || '' }}
         with:
           tagName: ${{ inputs.release-id && format('v{0}', steps.get-version.outputs.version) || '' }}
           releaseName: ${{ inputs.release-id && format('v{0}', steps.get-version.outputs.version) || '' }}
