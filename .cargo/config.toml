@@ -1,1 +1,11 @@
 [build]
+
+# Windows-specific build configuration to disable Vulkan in whisper.cpp
+[target.x86_64-pc-windows-msvc]
+rustflags = []
+
+[env]
+# Disable Vulkan/CUDA/Metal on Windows builds
+GGML_VULKAN = { value = "OFF", condition = { target_family = "windows" } }
+GGML_CUDA = { value = "OFF", condition = { target_family = "windows" } }
+GGML_METAL = { value = "OFF", condition = { target_family = "windows" } }
