@@ -27,6 +27,9 @@ pub async fn download_model(
     model_manager: State<'_, Arc<ModelManager>>,
     model_id: String,
 ) -> Result<(), String> {
+    // Validate model ID before download
+    crate::validation::validate_model_id(&model_id)?;
+
     model_manager
         .download_model(&model_id)
         .await
@@ -39,6 +42,9 @@ pub async fn delete_model(
     model_manager: State<'_, Arc<ModelManager>>,
     model_id: String,
 ) -> Result<(), String> {
+    // Validate model ID before deletion
+    crate::validation::validate_model_id(&model_id)?;
+
     model_manager
         .delete_model(&model_id)
         .map_err(|e| e.to_string())
@@ -52,6 +58,9 @@ pub async fn set_active_model(
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
     model_id: String,
 ) -> Result<(), String> {
+    // Validate model ID
+    crate::validation::validate_model_id(&model_id)?;
+
     // Check if model exists and is available
     let model_info = model_manager
         .get_model_info(&model_id)

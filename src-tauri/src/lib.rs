@@ -7,7 +7,6 @@ mod clipboard;
 mod commands;
 mod helpers;
 mod input;
-mod llm_client;
 mod managers;
 mod medical_vocab;
 mod overlay;
@@ -17,13 +16,15 @@ mod signal_handle;
 mod tray;
 mod tray_i18n;
 mod utils;
+mod validation;
 #[cfg(debug_assertions)]
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, Builder};
 
 use env_filter::Builder as EnvFilterBuilder;
 use managers::audio::AudioRecordingManager;
-use managers::history::HistoryManager;
+// EPHEMERAL MODE: History manager disabled - transcriptions not saved to disk
+// use managers::history::HistoryManager;
 use managers::model::ModelManager;
 use managers::transcription::TranscriptionManager;
 #[cfg(unix)]
@@ -113,8 +114,18 @@ fn show_main_window(app: &AppHandle) {
 
 fn initialize_core_logic(app_handle: &AppHandle) {
     // Initialize the input state (Enigo singleton for keyboard/mouse simulation)
-    let enigo_state = input::EnigoState::new().expect("Failed to initialize input state (Enigo)");
-    app_handle.manage(enigo_state);
+    // Note: This may fail on macOS if accessibility permissions are not granted yet.
+    // In that case, we log the error and continue - the app will show a permission prompt
+    // when the user tries to paste, and Enigo will be initialized lazily after permissions are granted.
+    match input::EnigoState::new() {
+        Ok(enigo_state) => {
+            app_handle.manage(enigo_state);
+            log::info!("Input state (Enigo) initialized successfully");
+        }
+        Err(e) => {
+            log::warn!("Failed to initialize input state (Enigo): {}. This is normal on first launch if accessibility permissions are not yet granted. The app will continue to run, and input will be initialized when permissions are available.", e);
+        }
+    };
 
     // Initialize the managers
     let recording_manager = Arc::new(
@@ -126,23 +137,34 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         TranscriptionManager::new(app_handle, model_manager.clone())
             .expect("Failed to initialize transcription manager"),
     );
-    let history_manager =
-        Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
+
+    // EPHEMERAL MODE: History manager disabled for privacy compliance
+    // Transcriptions are processed in-memory only and not persisted to disk
+    // This eliminates encryption requirements and reduces PIPEDA compliance burden
+    // let history_manager =
+    //     Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
 
     // Add managers to Tauri's managed state
     app_handle.manage(recording_manager.clone());
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
-    app_handle.manage(history_manager.clone());
+    // app_handle.manage(history_manager.clone());
 
     // Initialize the shortcuts
     shortcut::init_shortcuts(app_handle);
 
     #[cfg(unix)]
-    let signals = Signals::new(&[SIGUSR2]).unwrap();
-    // Set up SIGUSR2 signal handler for toggling transcription
-    #[cfg(unix)]
-    signal_handle::setup_signal_handler(app_handle.clone(), signals);
+    {
+        match Signals::new([SIGUSR2]) {
+            Ok(signals) => {
+                // Set up SIGUSR2 signal handler for toggling transcription
+                signal_handle::setup_signal_handler(app_handle.clone(), signals);
+            }
+            Err(e) => {
+                log::error!("Failed to initialize signal handler: {}", e);
+            }
+        }
+    }
 
     // Apply macOS Accessory policy if starting hidden
     #[cfg(target_os = "macos")]
@@ -158,50 +180,66 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Choose the appropriate initial icon based on theme
     let initial_icon_path = tray::get_icon_path(initial_theme, tray::TrayIconState::Idle);
 
-    let tray = TrayIconBuilder::new()
-        .icon(
-            Image::from_path(
-                app_handle
-                    .path()
-                    .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
-                    .unwrap(),
-            )
-            .unwrap(),
-        )
-        .show_menu_on_left_click(true)
-        .icon_as_template(true)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "settings" => {
-                show_main_window(app);
-            }
-            "check_updates" => {
-                let settings = settings::get_settings(app);
-                if settings.update_checks_enabled {
-                    show_main_window(app);
-                    let _ = app.emit("check-for-updates", ());
-                }
-            }
-            "cancel" => {
-                use crate::utils::cancel_current_operation;
+    let tray = match app_handle
+        .path()
+        .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
+    {
+        Ok(icon_path) => match Image::from_path(icon_path) {
+            Ok(icon_image) => TrayIconBuilder::new()
+                .icon(icon_image)
+                .show_menu_on_left_click(true)
+                .icon_as_template(true)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "settings" => {
+                        show_main_window(app);
+                    }
+                    "check_updates" => {
+                        let settings = settings::get_settings(app);
+                        if settings.update_checks_enabled {
+                            show_main_window(app);
+                            let _ = app.emit("check-for-updates", ());
+                        }
+                    }
+                    "cancel" => {
+                        use crate::utils::cancel_current_operation;
 
-                // Use centralized cancellation that handles all operations
-                cancel_current_operation(app);
+                        // Use centralized cancellation that handles all operations
+                        cancel_current_operation(app);
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .build(app_handle)
+                .map_err(|e| {
+                    log::error!("Failed to build tray icon: {}", e);
+                    e
+                })
+                .ok(),
+            Err(e) => {
+                log::error!("Failed to load tray icon image: {}", e);
+                None
             }
-            "quit" => {
-                app.exit(0);
-            }
-            _ => {}
-        })
-        .build(app_handle)
-        .unwrap();
-    app_handle.manage(tray);
+        },
+        Err(e) => {
+            log::error!("Failed to resolve tray icon path: {}", e);
+            None
+        }
+    };
+
+    if let Some(tray_icon) = tray {
+        app_handle.manage(tray_icon);
+    } else {
+        log::warn!("Tray icon not created, continuing without system tray");
+    }
 
     // Initialize tray menu with idle state
     utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
 
     // Get the autostart manager and configure based on user setting
     let autostart_manager = app_handle.autolaunch();
-    let settings = settings::get_settings(&app_handle);
+    let settings = settings::get_settings(app_handle);
 
     if settings.autostart_enabled {
         // Enable autostart if user has opted in
@@ -249,22 +287,15 @@ pub fn run() {
         shortcut::change_word_correction_threshold_setting,
         shortcut::change_paste_method_setting,
         shortcut::change_clipboard_handling_setting,
-        shortcut::change_post_process_enabled_setting,
-        shortcut::change_post_process_base_url_setting,
-        shortcut::change_post_process_api_key_setting,
-        shortcut::change_post_process_model_setting,
-        shortcut::set_post_process_provider,
-        shortcut::fetch_post_process_models,
-        shortcut::add_post_process_prompt,
-        shortcut::update_post_process_prompt,
-        shortcut::delete_post_process_prompt,
-        shortcut::set_post_process_selected_prompt,
         shortcut::update_custom_words,
         shortcut::suspend_binding,
         shortcut::resume_binding,
         shortcut::change_mute_while_recording_setting,
         shortcut::change_append_trailing_space_setting,
         shortcut::change_app_language_setting,
+        shortcut::mark_setup_completed,
+        shortcut::change_medical_mode_setting,
+        shortcut::change_hide_privacy_notice_setting,
         shortcut::change_update_checks_setting,
         trigger_update_check,
         commands::cancel_operation,
@@ -273,9 +304,12 @@ pub fn run() {
         commands::get_default_settings,
         commands::get_log_dir_path,
         commands::set_log_level,
-        commands::open_recordings_folder,
+        // EPHEMERAL MODE: Recordings folder command disabled - no audio files saved
+        // commands::open_recordings_folder,
         commands::open_log_dir,
         commands::open_app_data_dir,
+        commands::restart_app,
+        commands::check_github_release,
         commands::models::get_available_models,
         commands::models::get_model_info,
         commands::models::download_model,
@@ -306,12 +340,13 @@ pub fn run() {
         commands::transcription::set_model_unload_timeout,
         commands::transcription::get_model_load_status,
         commands::transcription::unload_model_manually,
-        commands::history::get_history_entries,
-        commands::history::toggle_history_entry_saved,
-        commands::history::get_audio_file_path,
-        commands::history::delete_history_entry,
-        commands::history::update_history_limit,
-        commands::history::update_recording_retention_period,
+        // EPHEMERAL MODE: History commands disabled - no persistent storage
+        // commands::history::get_history_entries,
+        // commands::history::toggle_history_entry_saved,
+        // commands::history::get_audio_file_path,
+        // commands::history::delete_history_entry,
+        // commands::history::update_history_limit,
+        // commands::history::update_recording_retention_period,
         helpers::clamshell::is_laptop,
     ]);
 
@@ -358,7 +393,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_macos_permissions::init())
@@ -371,7 +405,36 @@ pub fn run() {
         ))
         .manage(Mutex::new(ShortcutToggleStates::default()))
         .setup(move |app| {
-            let settings = get_settings(&app.handle());
+            // Remove quarantine attribute from the app on first launch (macOS only)
+            #[cfg(target_os = "macos")]
+            {
+                use std::process::Command;
+                if let Ok(exe_path) = std::env::current_exe() {
+                    if let Some(app_bundle) = exe_path.ancestors().nth(3) {
+                        // Try to remove quarantine attribute (silently fail if already removed or no permission)
+                        let _ = Command::new("xattr")
+                            .args(["-d", "com.apple.quarantine"])
+                            .arg(app_bundle)
+                            .output();
+                        log::debug!("Attempted to remove quarantine attribute from app bundle");
+                    }
+                }
+            }
+
+            // Request accessibility permission FIRST, before any UI is shown
+            // This creates a better onboarding experience - users grant permission before seeing the app
+            #[cfg(target_os = "macos")]
+            {
+                use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;
+                let has_permission = application_is_trusted_with_prompt();
+                if has_permission {
+                    log::info!("Accessibility permission already granted");
+                } else {
+                    log::info!("Accessibility permission dialog shown. Please grant permission to enable paste functionality.");
+                }
+            }
+
+            let settings = get_settings(app.handle());
             let tauri_log_level: tauri_plugin_log::LogLevel = settings.log_level.into();
             let file_log_level: log::Level = tauri_log_level.into();
             // Store the file log level in the atomic for the filter to use
@@ -383,8 +446,12 @@ pub fn run() {
             // Show main window only if not starting hidden
             if !settings.start_hidden {
                 if let Some(main_window) = app_handle.get_webview_window("main") {
-                    main_window.show().unwrap();
-                    main_window.set_focus().unwrap();
+                    if let Err(e) = main_window.show() {
+                        log::error!("Failed to show main window: {}", e);
+                    }
+                    if let Err(e) = main_window.set_focus() {
+                        log::error!("Failed to set focus on main window: {}", e);
+                    }
                 }
             }
 
@@ -407,7 +474,7 @@ pub fn run() {
             tauri::WindowEvent::ThemeChanged(theme) => {
                 log::info!("Theme changed to: {:?}", theme);
                 // Update tray icon to match new theme, maintaining idle state
-                utils::change_tray_icon(&window.app_handle(), utils::TrayIconState::Idle);
+                utils::change_tray_icon(window.app_handle(), utils::TrayIconState::Idle);
             }
             _ => {}
         })

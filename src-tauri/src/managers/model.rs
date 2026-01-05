@@ -3,6 +3,7 @@ use anyhow::Result;
 use flate2::read::GzDecoder;
 use futures_util::StreamExt;
 use log::{debug, info, warn};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::HashMap;
@@ -10,7 +11,6 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::Mutex;
 use tar::Archive;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -33,8 +33,9 @@ pub struct ModelInfo {
     pub partial_size: u64,
     pub is_directory: bool,
     pub engine_type: EngineType,
-    pub accuracy_score: f32, // 0.0 to 1.0, higher is more accurate
-    pub speed_score: f32,    // 0.0 to 1.0, higher is faster
+    pub accuracy_score: f32,        // 0.0 to 1.0, higher is more accurate
+    pub speed_score: f32,           // 0.0 to 1.0, higher is faster
+    pub platform_recommended: bool, // True if this model is recommended for the current platform
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -48,7 +49,7 @@ pub struct DownloadProgress {
 pub struct ModelManager {
     app_handle: AppHandle,
     models_dir: PathBuf,
-    available_models: Mutex<HashMap<String, ModelInfo>>,
+    available_models: RwLock<HashMap<String, ModelInfo>>,
 }
 
 impl ModelManager {
@@ -83,6 +84,7 @@ impl ModelManager {
                 engine_type: EngineType::Whisper,
                 accuracy_score: 0.60,
                 speed_score: 0.85,
+                platform_recommended: false,
             },
         );
 
@@ -103,6 +105,7 @@ impl ModelManager {
                 engine_type: EngineType::Whisper,
                 accuracy_score: 0.75,
                 speed_score: 0.60,
+                platform_recommended: false,
             },
         );
 
@@ -122,6 +125,7 @@ impl ModelManager {
                 engine_type: EngineType::Whisper,
                 accuracy_score: 0.80,
                 speed_score: 0.40,
+                platform_recommended: false,
             },
         );
 
@@ -141,15 +145,20 @@ impl ModelManager {
                 engine_type: EngineType::Whisper,
                 accuracy_score: 0.85,
                 speed_score: 0.30,
+                platform_recommended: false,
             },
         );
 
         // Add NVIDIA Parakeet models (directory-based)
+        // Note: Parakeet is especially recommended for Windows since GPU backends are disabled
         available_models.insert(
             "parakeet-tdt-0.6b-v2".to_string(),
             ModelInfo {
                 id: "parakeet-tdt-0.6b-v2".to_string(),
                 name: "Parakeet V2".to_string(),
+                #[cfg(target_os = "windows")]
+                description: "English only. Recommended for Windows - fast and accurate without GPU requirements.".to_string(),
+                #[cfg(not(target_os = "windows"))]
                 description: "English only. The best model for English speakers.".to_string(),
                 filename: "parakeet-tdt-0.6b-v2-int8".to_string(), // Directory name
                 url: Some("https://blob.handy.computer/parakeet-v2-int8.tar.gz".to_string()),
@@ -161,6 +170,10 @@ impl ModelManager {
                 engine_type: EngineType::Parakeet,
                 accuracy_score: 0.85,
                 speed_score: 0.85,
+                #[cfg(target_os = "windows")]
+                platform_recommended: true,
+                #[cfg(not(target_os = "windows"))]
+                platform_recommended: false,
             },
         );
 
@@ -169,7 +182,10 @@ impl ModelManager {
             ModelInfo {
                 id: "parakeet-tdt-0.6b-v3".to_string(),
                 name: "Parakeet V3".to_string(),
-                description: "Fast and accurate".to_string(),
+                #[cfg(target_os = "windows")]
+                description: "English only. Recommended for Windows - optimized with Int8 quantization for 2x faster inference.".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                description: "Fast and accurate with Int8 quantization".to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(), // Directory name
                 url: Some("https://blob.handy.computer/parakeet-v3-int8.tar.gz".to_string()),
                 size_mb: 478, // Approximate size for int8 quantized model
@@ -180,13 +196,17 @@ impl ModelManager {
                 engine_type: EngineType::Parakeet,
                 accuracy_score: 0.80,
                 speed_score: 0.85,
+                #[cfg(target_os = "windows")]
+                platform_recommended: true,
+                #[cfg(not(target_os = "windows"))]
+                platform_recommended: false,
             },
         );
 
         let manager = Self {
             app_handle: app_handle.clone(),
             models_dir,
-            available_models: Mutex::new(available_models),
+            available_models: RwLock::new(available_models),
         };
 
         // Migrate any bundled models to user directory
@@ -202,12 +222,12 @@ impl ModelManager {
     }
 
     pub fn get_available_models(&self) -> Vec<ModelInfo> {
-        let models = self.available_models.lock().unwrap();
+        let models = self.available_models.read();
         models.values().cloned().collect()
     }
 
     pub fn get_model_info(&self, model_id: &str) -> Option<ModelInfo> {
-        let models = self.available_models.lock().unwrap();
+        let models = self.available_models.read();
         models.get(model_id).cloned()
     }
 
@@ -217,7 +237,7 @@ impl ModelManager {
 
         for filename in &bundled_models {
             let bundled_path = self.app_handle.path().resolve(
-                &format!("resources/models/{}", filename),
+                format!("resources/models/{}", filename),
                 tauri::path::BaseDirectory::Resource,
             );
 
@@ -239,7 +259,7 @@ impl ModelManager {
     }
 
     fn update_download_status(&self) -> Result<()> {
-        let mut models = self.available_models.lock().unwrap();
+        let mut models = self.available_models.write();
 
         for model in models.values_mut() {
             if model.is_directory {
@@ -291,12 +311,42 @@ impl ModelManager {
 
         // If no model is selected or selected model is empty
         if settings.selected_model.is_empty() {
-            // Find the first available (downloaded) model
-            let models = self.available_models.lock().unwrap();
-            if let Some(available_model) = models.values().find(|model| model.is_downloaded) {
+            let models = self.available_models.read();
+
+            // Platform-aware model selection priority
+            let available_model = {
+                #[cfg(target_os = "windows")]
+                {
+                    // On Windows, prioritize Parakeet models due to disabled GPU backends
+                    models
+                        .values()
+                        .filter(|model| model.is_downloaded)
+                        .max_by_key(|model| {
+                            // Prioritize by: 1) Parakeet engine, 2) newer versions
+                            let is_parakeet = matches!(model.engine_type, EngineType::Parakeet);
+                            let version_priority = if model.id.contains("v3") {
+                                3
+                            } else if model.id.contains("v2") {
+                                2
+                            } else {
+                                1
+                            };
+                            (is_parakeet, version_priority)
+                        })
+                }
+                #[cfg(not(target_os = "windows"))]
+                {
+                    // On other platforms, just find the first available downloaded model
+                    models.values().find(|model| model.is_downloaded)
+                }
+            };
+
+            if let Some(available_model) = available_model {
                 info!(
-                    "Auto-selecting model: {} ({})",
-                    available_model.id, available_model.name
+                    "Auto-selecting model: {} ({}) [Platform: {}]",
+                    available_model.id,
+                    available_model.name,
+                    std::env::consts::OS
                 );
 
                 // Update settings with the selected model
@@ -313,7 +363,7 @@ impl ModelManager {
 
     pub async fn download_model(&self, model_id: &str) -> Result<()> {
         let model_info = {
-            let models = self.available_models.lock().unwrap();
+            let models = self.available_models.read();
             models.get(model_id).cloned()
         };
 
@@ -350,7 +400,7 @@ impl ModelManager {
 
         // Mark as downloading
         {
-            let mut models = self.available_models.lock().unwrap();
+            let mut models = self.available_models.write();
             if let Some(model) = models.get_mut(model_id) {
                 model.is_downloading = true;
             }
@@ -390,7 +440,7 @@ impl ModelManager {
         {
             // Mark as not downloading on error
             {
-                let mut models = self.available_models.lock().unwrap();
+                let mut models = self.available_models.write();
                 if let Some(model) = models.get_mut(model_id) {
                     model.is_downloading = false;
                 }
@@ -436,17 +486,19 @@ impl ModelManager {
             .app_handle
             .emit("model-download-progress", &initial_progress);
 
-        // Download with progress
+        // Download with progress (throttled to reduce IPC overhead)
+        let mut last_progress_emit = std::time::Instant::now();
+        const PROGRESS_THROTTLE_MS: u128 = 100; // Emit max 10 times per second
+
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| {
+            let chunk = chunk.inspect_err(|_e| {
                 // Mark as not downloading on error
                 {
-                    let mut models = self.available_models.lock().unwrap();
+                    let mut models = self.available_models.write();
                     if let Some(model) = models.get_mut(model_id) {
                         model.is_downloading = false;
                     }
                 }
-                e
             })?;
 
             file.write_all(&chunk)?;
@@ -458,19 +510,34 @@ impl ModelManager {
                 0.0
             };
 
-            // Emit progress event
-            let progress = DownloadProgress {
-                model_id: model_id.to_string(),
-                downloaded,
-                total: total_size,
-                percentage,
-            };
+            // Throttle progress events to reduce IPC overhead
+            let now = std::time::Instant::now();
+            if now.duration_since(last_progress_emit).as_millis() >= PROGRESS_THROTTLE_MS {
+                let progress = DownloadProgress {
+                    model_id: model_id.to_string(),
+                    downloaded,
+                    total: total_size,
+                    percentage,
+                };
 
-            let _ = self.app_handle.emit("model-download-progress", &progress);
+                let _ = self.app_handle.emit("model-download-progress", &progress);
+                last_progress_emit = now;
+            }
         }
 
         file.flush()?;
         drop(file); // Ensure file is closed before moving
+
+        // Emit final 100% progress to ensure UI updates
+        let final_progress = DownloadProgress {
+            model_id: model_id.to_string(),
+            downloaded,
+            total: total_size,
+            percentage: if total_size > 0 { 100.0 } else { 0.0 },
+        };
+        let _ = self
+            .app_handle
+            .emit("model-download-progress", &final_progress);
 
         // Verify downloaded file size matches expected size
         if total_size > 0 {
@@ -479,7 +546,7 @@ impl ModelManager {
                 // Download is incomplete/corrupted - delete partial and return error
                 let _ = fs::remove_file(&partial_path);
                 {
-                    let mut models = self.available_models.lock().unwrap();
+                    let mut models = self.available_models.write();
                     if let Some(model) = models.get_mut(model_id) {
                         model.is_downloading = false;
                     }
@@ -568,7 +635,7 @@ impl ModelManager {
 
         // Update download status
         {
-            let mut models = self.available_models.lock().unwrap();
+            let mut models = self.available_models.write();
             if let Some(model) = models.get_mut(model_id) {
                 model.is_downloading = false;
                 model.is_downloaded = true;
@@ -591,7 +658,7 @@ impl ModelManager {
         debug!("ModelManager: delete_model called for: {}", model_id);
 
         let model_info = {
-            let models = self.available_models.lock().unwrap();
+            let models = self.available_models.read();
             models.get(model_id).cloned()
         };
 
@@ -695,7 +762,7 @@ impl ModelManager {
         debug!("ModelManager: cancel_download called for: {}", model_id);
 
         let _model_info = {
-            let models = self.available_models.lock().unwrap();
+            let models = self.available_models.read();
             models.get(model_id).cloned()
         };
 
@@ -704,7 +771,7 @@ impl ModelManager {
 
         // Mark as not downloading
         {
-            let mut models = self.available_models.lock().unwrap();
+            let mut models = self.available_models.write();
             if let Some(model) = models.get_mut(model_id) {
                 model.is_downloading = false;
             }

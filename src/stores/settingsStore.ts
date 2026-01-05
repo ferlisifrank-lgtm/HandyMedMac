@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import type { AppSettings as Settings, AudioDevice } from "@/bindings";
+import type { AppSettings as Settings, AudioDevice, LogLevel } from "@/bindings";
 import { commands } from "@/bindings";
 
 interface SettingsStore {
@@ -11,7 +11,6 @@ interface SettingsStore {
   audioDevices: AudioDevice[];
   outputDevices: AudioDevice[];
   customSounds: { start: boolean; stop: boolean };
-  postProcessModelOptions: Record<string, string[]>;
 
   // Actions
   initialize: () => Promise<void>;
@@ -30,23 +29,6 @@ interface SettingsStore {
   isUpdatingKey: (key: string) => boolean;
   playTestSound: (soundType: "start" | "stop") => Promise<void>;
   checkCustomSounds: () => Promise<void>;
-  setPostProcessProvider: (providerId: string) => Promise<void>;
-  updatePostProcessSetting: (
-    settingType: "base_url" | "api_key" | "model",
-    providerId: string,
-    value: string,
-  ) => Promise<void>;
-  updatePostProcessBaseUrl: (
-    providerId: string,
-    baseUrl: string,
-  ) => Promise<void>;
-  updatePostProcessApiKey: (
-    providerId: string,
-    apiKey: string,
-  ) => Promise<void>;
-  updatePostProcessModel: (providerId: string, model: string) => Promise<void>;
-  fetchPostProcessModels: (providerId: string) => Promise<string[]>;
-  setPostProcessModelOptions: (providerId: string, models: string[]) => void;
 
   // Internal state setters
   setSettings: (settings: Settings | null) => void;
@@ -99,8 +81,9 @@ const settingUpdaters: {
         ? "default"
         : (value as string),
     ),
-  recording_retention_period: (value) =>
-    commands.updateRecordingRetentionPeriod(value as string),
+  // EPHEMERAL MODE: Recording retention removed - no files saved
+  // recording_retention_period: (value) =>
+  //   commands.updateRecordingRetentionPeriod(value as string),
   translate_to_english: (value) =>
     commands.changeTranslateToEnglishSetting(value as boolean),
   selected_language: (value) =>
@@ -114,17 +97,25 @@ const settingUpdaters: {
   paste_method: (value) => commands.changePasteMethodSetting(value as string),
   clipboard_handling: (value) =>
     commands.changeClipboardHandlingSetting(value as string),
-  history_limit: (value) => commands.updateHistoryLimit(value as number),
-  post_process_enabled: (value) =>
-    commands.changePostProcessEnabledSetting(value as boolean),
-  post_process_selected_prompt_id: (value) =>
-    commands.setPostProcessSelectedPrompt(value as string),
+  // EPHEMERAL MODE: History limit removed - no persistent history
+  // history_limit: (value) => commands.updateHistoryLimit(value as number),
+  // EPHEMERAL MODE: Post-processing removed - LLM features disabled
+  // post_process_enabled: (value) =>
+  //   commands.changePostProcessEnabledSetting(value as boolean),
+  // post_process_selected_prompt_id: (value) =>
+  //   commands.setPostProcessSelectedPrompt(value as string),
   mute_while_recording: (value) =>
     commands.changeMuteWhileRecordingSetting(value as boolean),
   append_trailing_space: (value) =>
     commands.changeAppendTrailingSpaceSetting(value as boolean),
-  log_level: (value) => commands.setLogLevel(value as any),
+  log_level: (value) => commands.setLogLevel(value as LogLevel),
   app_language: (value) => commands.changeAppLanguageSetting(value as string),
+  medical_mode_enabled: (value) =>
+    commands.changeMedicalModeSetting(value as boolean),
+  setup_completed: (value) =>
+    value ? commands.markSetupCompleted() : Promise.resolve(),
+  hide_privacy_notice: (value) =>
+    commands.changeHidePrivacyNoticeSetting(value as boolean),
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -136,7 +127,6 @@ export const useSettingsStore = create<SettingsStore>()(
     audioDevices: [],
     outputDevices: [],
     customSounds: { start: false, stop: false },
-    postProcessModelOptions: {},
 
     // Internal setters
     setSettings: (settings) => set({ settings }),
@@ -277,7 +267,7 @@ export const useSettingsStore = create<SettingsStore>()(
       if (defaultSettings) {
         const defaultValue = defaultSettings[key];
         if (defaultValue !== undefined) {
-          await get().updateSetting(key, defaultValue as any);
+          await get().updateSetting(key, defaultValue);
         }
       }
     },
@@ -350,119 +340,10 @@ export const useSettingsStore = create<SettingsStore>()(
       }
     },
 
-    setPostProcessProvider: async (providerId) => {
-      const { settings, setUpdating, refreshSettings } = get();
-      const updateKey = "post_process_provider_id";
-      const previousId = settings?.post_process_provider_id ?? null;
-
-      setUpdating(updateKey, true);
-
-      if (settings) {
-        set((state) => ({
-          settings: state.settings
-            ? { ...state.settings, post_process_provider_id: providerId }
-            : null,
-        }));
-      }
-
-      try {
-        await commands.setPostProcessProvider(providerId);
-        await refreshSettings();
-      } catch (error) {
-        console.error("Failed to set post-process provider:", error);
-        if (previousId !== null) {
-          set((state) => ({
-            settings: state.settings
-              ? { ...state.settings, post_process_provider_id: previousId }
-              : null,
-          }));
-        }
-      } finally {
-        setUpdating(updateKey, false);
-      }
-    },
-
-    // Generic updater for post-processing provider settings
-    updatePostProcessSetting: async (
-      settingType: "base_url" | "api_key" | "model",
-      providerId: string,
-      value: string,
-    ) => {
-      const { setUpdating, refreshSettings } = get();
-      const updateKey = `post_process_${settingType}:${providerId}`;
-
-      setUpdating(updateKey, true);
-
-      try {
-        if (settingType === "base_url") {
-          await commands.changePostProcessBaseUrlSetting(providerId, value);
-        } else if (settingType === "api_key") {
-          await commands.changePostProcessApiKeySetting(providerId, value);
-        } else if (settingType === "model") {
-          await commands.changePostProcessModelSetting(providerId, value);
-        }
-        await refreshSettings();
-      } catch (error) {
-        console.error(
-          `Failed to update post-process ${settingType.replace("_", " ")}:`,
-          error,
-        );
-      } finally {
-        setUpdating(updateKey, false);
-      }
-    },
-
-    updatePostProcessBaseUrl: async (providerId, baseUrl) => {
-      return get().updatePostProcessSetting("base_url", providerId, baseUrl);
-    },
-
-    updatePostProcessApiKey: async (providerId, apiKey) => {
-      // Clear cached models when API key changes - user should click refresh after
-      set((state) => ({
-        postProcessModelOptions: {
-          ...state.postProcessModelOptions,
-          [providerId]: [],
-        },
-      }));
-      return get().updatePostProcessSetting("api_key", providerId, apiKey);
-    },
-
-    updatePostProcessModel: async (providerId, model) => {
-      return get().updatePostProcessSetting("model", providerId, model);
-    },
-
-    fetchPostProcessModels: async (providerId) => {
-      const updateKey = `post_process_models_fetch:${providerId}`;
-      const { setUpdating, setPostProcessModelOptions } = get();
-
-      setUpdating(updateKey, true);
-
-      try {
-        // Call Tauri backend command instead of fetch
-        const result = await commands.fetchPostProcessModels(providerId);
-        if (result.status === "ok") {
-          setPostProcessModelOptions(providerId, result.data);
-          return result.data;
-        } else {
-          console.error("Failed to fetch models:", result.error);
-          return [];
-        }
-      } catch (error) {
-        console.error("Failed to fetch models:", error);
-        // Don't cache empty array on error - let user retry
-        return [];
-      } finally {
-        setUpdating(updateKey, false);
-      }
-    },
-
-    setPostProcessModelOptions: (providerId, models) =>
-      set((state) => ({
-        postProcessModelOptions: {
-          ...state.postProcessModelOptions,
-          [providerId]: models,
-        },
-      })),
+    // EPHEMERAL MODE: All post-processing methods removed - LLM features disabled
+    // setPostProcessProvider, updatePostProcessSetting, updatePostProcessBaseUrl,
+    // updatePostProcessApiKey, updatePostProcessModel, fetchPostProcessModels,
+    // and setPostProcessModelOptions have been removed
 
     // Load default settings from Rust
     loadDefaultSettings: async () => {

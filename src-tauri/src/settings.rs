@@ -3,7 +3,7 @@ use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
 // Commented out Apple Intelligence constants
@@ -86,23 +86,7 @@ pub struct ShortcutBinding {
     pub current_binding: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Type)]
-pub struct LLMPrompt {
-    pub id: String,
-    pub name: String,
-    pub prompt: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Type)]
-pub struct PostProcessProvider {
-    pub id: String,
-    pub label: String,
-    pub base_url: String,
-    #[serde(default)]
-    pub allow_base_url_edit: bool,
-    #[serde(default)]
-    pub models_endpoint: Option<String>,
-}
+// LLM post-processing structs removed for privacy and HIPAA compliance
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "lowercase")]
@@ -114,7 +98,9 @@ pub enum OverlayPosition {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ModelUnloadTimeout {
+    #[default]
     Never,
     Immediately,
     Min2,
@@ -127,8 +113,10 @@ pub enum ModelUnloadTimeout {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum PasteMethod {
     CtrlV,
+    #[default]
     Direct,
     None,
     ShiftInsert,
@@ -137,7 +125,9 @@ pub enum PasteMethod {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ClipboardHandling {
+    #[default]
     DontModify,
     CopyToClipboard,
 }
@@ -150,28 +140,6 @@ pub enum RecordingRetentionPeriod {
     Days3,
     Weeks2,
     Months3,
-}
-
-impl Default for ModelUnloadTimeout {
-    fn default() -> Self {
-        ModelUnloadTimeout::Never
-    }
-}
-
-impl Default for PasteMethod {
-    fn default() -> Self {
-        // Default to CtrlV for macOS and Windows, Direct for Linux
-        #[cfg(target_os = "linux")]
-        return PasteMethod::Direct;
-        #[cfg(not(target_os = "linux"))]
-        return PasteMethod::CtrlV;
-    }
-}
-
-impl Default for ClipboardHandling {
-    fn default() -> Self {
-        ClipboardHandling::DontModify
-    }
 }
 
 impl ModelUnloadTimeout {
@@ -215,11 +183,11 @@ impl SoundTheme {
         }
     }
 
-    pub fn to_start_path(&self) -> String {
+    pub fn to_start_path(self) -> String {
         format!("resources/{}_start.wav", self.as_str())
     }
 
-    pub fn to_stop_path(&self) -> String {
+    pub fn to_stop_path(self) -> String {
         format!("resources/{}_stop.wav", self.as_str())
     }
 }
@@ -274,28 +242,18 @@ pub struct AppSettings {
     pub paste_method: PasteMethod,
     #[serde(default)]
     pub clipboard_handling: ClipboardHandling,
-    #[serde(default = "default_post_process_enabled")]
-    pub post_process_enabled: bool,
-    #[serde(default = "default_post_process_provider_id")]
-    pub post_process_provider_id: String,
-    #[serde(default = "default_post_process_providers")]
-    pub post_process_providers: Vec<PostProcessProvider>,
-    #[serde(default = "default_post_process_api_keys")]
-    pub post_process_api_keys: HashMap<String, String>,
-    #[serde(default = "default_post_process_models")]
-    pub post_process_models: HashMap<String, String>,
-    #[serde(default = "default_post_process_prompts")]
-    pub post_process_prompts: Vec<LLMPrompt>,
-    #[serde(default)]
-    pub post_process_selected_prompt_id: Option<String>,
     #[serde(default)]
     pub mute_while_recording: bool,
     #[serde(default)]
     pub append_trailing_space: bool,
     #[serde(default = "default_app_language")]
     pub app_language: String,
-#[serde(default = "default_medical_mode_enabled")]
+    #[serde(default = "default_medical_mode_enabled")]
     pub medical_mode_enabled: bool,
+    #[serde(default)]
+    pub setup_completed: bool,
+    #[serde(default)]
+    pub hide_privacy_notice: bool,
 }
 
 fn default_model() -> String {
@@ -338,7 +296,9 @@ fn default_debug_mode() -> bool {
 }
 
 fn default_log_level() -> LogLevel {
-    LogLevel::Debug
+    // WARN level by default to avoid logging sensitive transcription data
+    // Users can enable DEBUG mode in settings if needed for troubleshooting
+    LogLevel::Warn
 }
 
 fn default_word_correction_threshold() -> f64 {
@@ -361,14 +321,11 @@ fn default_sound_theme() -> SoundTheme {
     SoundTheme::Marimba
 }
 
-fn default_post_process_enabled() -> bool {
+fn default_medical_mode_enabled() -> bool {
+    // Medical mode disabled by default - requires explicit user opt-in
+    // This is a PIPEDA compliance measure (Section 4.1 - Consent)
     false
 }
-
-fn default_medical_mode_enabled() -> bool {
-    true
-}
-
 
 fn default_app_language() -> String {
     tauri_plugin_os::locale()
@@ -376,114 +333,7 @@ fn default_app_language() -> String {
         .unwrap_or_else(|| "en".to_string())
 }
 
-fn default_post_process_provider_id() -> String {
-    "openai".to_string()
-}
-
-fn default_post_process_providers() -> Vec<PostProcessProvider> {
-    vec![
-        PostProcessProvider {
-            id: "openai".to_string(),
-            label: "OpenAI".to_string(),
-            base_url: "https://api.openai.com/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-        },
-        PostProcessProvider {
-            id: "openrouter".to_string(),
-            label: "OpenRouter".to_string(),
-            base_url: "https://openrouter.ai/api/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-        },
-        PostProcessProvider {
-            id: "anthropic".to_string(),
-            label: "Anthropic".to_string(),
-            base_url: "https://api.anthropic.com/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-        },
-        PostProcessProvider {
-            id: "custom".to_string(),
-            label: "Custom".to_string(),
-            base_url: "http://localhost:11434/v1".to_string(),
-            allow_base_url_edit: true,
-            models_endpoint: Some("/models".to_string()),
-        },
-    ]
-    // Apple Intelligence provider removed - not supported on this macOS version
-}
-
-fn default_post_process_api_keys() -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    for provider in default_post_process_providers() {
-        map.insert(provider.id, String::new());
-    }
-    map
-}
-
-fn default_model_for_provider(_provider_id: &str) -> String {
-    // Apple Intelligence handling removed
-    String::new()
-}
-
-fn default_post_process_models() -> HashMap<String, String> {
-    let mut map = HashMap::new();
-    for provider in default_post_process_providers() {
-        map.insert(
-            provider.id.clone(),
-            default_model_for_provider(&provider.id),
-        );
-    }
-    map
-}
-
-fn default_post_process_prompts() -> Vec<LLMPrompt> {
-    vec![LLMPrompt {
-        id: "default_improve_transcriptions".to_string(),
-        name: "Improve Transcriptions".to_string(),
-        prompt: "Clean this transcript:\n1. Fix spelling, capitalization, and punctuation errors\n2. Convert number words to digits (twenty-five → 25, ten percent → 10%, five dollars → $5)\n3. Replace spoken punctuation with symbols (period → ., comma → ,, question mark → ?)\n4. Remove filler words (um, uh, like as filler)\n5. Keep the language in the original version (if it was french, keep it in french for example)\n\nPreserve exact meaning and word order. Do not paraphrase or reorder content.\n\nReturn only the cleaned transcript.\n\nTranscript:\n${output}".to_string(),
-    }]
-}
-
-fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
-    let mut changed = false;
-    for provider in default_post_process_providers() {
-        if settings
-            .post_process_providers
-            .iter()
-            .all(|existing| existing.id != provider.id)
-        {
-            settings.post_process_providers.push(provider.clone());
-            changed = true;
-        }
-
-        if !settings.post_process_api_keys.contains_key(&provider.id) {
-            settings
-                .post_process_api_keys
-                .insert(provider.id.clone(), String::new());
-            changed = true;
-        }
-
-        let default_model = default_model_for_provider(&provider.id);
-        match settings.post_process_models.get_mut(&provider.id) {
-            Some(existing) => {
-                if existing.is_empty() && !default_model.is_empty() {
-                    *existing = default_model.clone();
-                    changed = true;
-                }
-            }
-            None => {
-                settings
-                    .post_process_models
-                    .insert(provider.id.clone(), default_model);
-                changed = true;
-            }
-        }
-    }
-
-    changed
-}
+// Post-processing helper functions removed - feature deprecated for privacy/HIPAA compliance
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 
@@ -506,7 +356,6 @@ pub fn get_default_settings() -> AppSettings {
             description: "Converts your speech into text.".to_string(),
             default_binding: default_shortcut.to_string(),
             current_binding: default_shortcut.to_string(),
-
         },
     );
     bindings.insert(
@@ -546,42 +395,16 @@ pub fn get_default_settings() -> AppSettings {
         recording_retention_period: default_recording_retention_period(),
         paste_method: PasteMethod::default(),
         clipboard_handling: ClipboardHandling::default(),
-        post_process_enabled: default_post_process_enabled(),
-        post_process_provider_id: default_post_process_provider_id(),
-        post_process_providers: default_post_process_providers(),
-        post_process_api_keys: default_post_process_api_keys(),
-        post_process_models: default_post_process_models(),
-        post_process_prompts: default_post_process_prompts(),
-        post_process_selected_prompt_id: None,
         mute_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),
- 	medical_mode_enabled: true,
+        medical_mode_enabled: true,
+        setup_completed: false,
+        hide_privacy_notice: false,
     }
 }
 
-impl AppSettings {
-    pub fn active_post_process_provider(&self) -> Option<&PostProcessProvider> {
-        self.post_process_providers
-            .iter()
-            .find(|provider| provider.id == self.post_process_provider_id)
-    }
-
-    pub fn post_process_provider(&self, provider_id: &str) -> Option<&PostProcessProvider> {
-        self.post_process_providers
-            .iter()
-            .find(|provider| provider.id == provider_id)
-    }
-
-    pub fn post_process_provider_mut(
-        &mut self,
-        provider_id: &str,
-    ) -> Option<&mut PostProcessProvider> {
-        self.post_process_providers
-            .iter_mut()
-            .find(|provider| provider.id == provider_id)
-    }
-}
+// AppSettings impl methods removed - post-processing feature deprecated
 
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     // Initialize store
@@ -589,7 +412,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         .store(SETTINGS_STORE_PATH)
         .expect("Failed to initialize store");
 
-    let mut settings = if let Some(settings_value) = store.get("settings") {
+    let settings = if let Some(settings_value) = store.get("settings") {
         // Parse the entire settings object
         match serde_json::from_value::<AppSettings>(settings_value) {
             Ok(mut settings) => {
@@ -599,16 +422,22 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
                 // Merge default bindings into existing settings
                 for (key, value) in default_settings.bindings {
-                    if !settings.bindings.contains_key(&key) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        settings.bindings.entry(key.clone())
+                    {
                         debug!("Adding missing binding: {}", key);
-                        settings.bindings.insert(key, value);
+                        e.insert(value);
                         updated = true;
                     }
                 }
 
                 if updated {
                     debug!("Settings updated with new bindings");
-                    store.set("settings", serde_json::to_value(&settings).unwrap());
+                    if let Ok(value) = serde_json::to_value(&settings) {
+                        store.set("settings", value);
+                    } else {
+                        warn!("Failed to serialize updated settings");
+                    }
                 }
 
                 settings
@@ -617,21 +446,94 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 warn!("Failed to parse settings: {}", e);
                 // Fall back to default settings if parsing fails
                 let default_settings = get_default_settings();
-                store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                if let Ok(value) = serde_json::to_value(&default_settings) {
+                    store.set("settings", value);
+                } else {
+                    warn!("Failed to serialize default settings");
+                }
                 default_settings
             }
         }
     } else {
         let default_settings = get_default_settings();
-        store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        if let Ok(value) = serde_json::to_value(&default_settings) {
+            store.set("settings", value);
+        } else {
+            warn!("Failed to serialize default settings");
+        }
         default_settings
     };
 
-    if ensure_post_process_defaults(&mut settings) {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
+    settings
+}
+
+/// Load bundled default custom vocabulary from resources
+fn load_bundled_custom_vocab(app: &AppHandle) -> Vec<String> {
+    let vocab_path = match app.path().resolve(
+        "resources/default_custom_vocab.txt",
+        tauri::path::BaseDirectory::Resource,
+    ) {
+        Ok(path) => path,
+        Err(e) => {
+            warn!("Failed to resolve bundled custom vocab path: {}", e);
+            return Vec::new();
+        }
+    };
+
+    match std::fs::read_to_string(&vocab_path) {
+        Ok(contents) => {
+            debug!("Loading bundled custom vocabulary from: {:?}", vocab_path);
+            contents
+                .lines()
+                .filter_map(|line| {
+                    let line = line.trim();
+                    // Skip comments and empty lines
+                    if line.is_empty() || line.starts_with('#') {
+                        None
+                    } else {
+                        Some(line.to_string())
+                    }
+                })
+                .collect()
+        }
+        Err(e) => {
+            warn!("Failed to read bundled custom vocab: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+/// Merge bundled vocabulary with user's custom words
+fn ensure_custom_vocab_defaults(app: &AppHandle, settings: &mut AppSettings) -> bool {
+    let bundled_vocab = load_bundled_custom_vocab(app);
+
+    if bundled_vocab.is_empty() {
+        return false;
     }
 
-    settings
+    // Check if user has any custom words already
+    let had_custom_words = !settings.custom_words.is_empty();
+
+    // Merge bundled vocab with user's custom words (user words take precedence)
+    let mut merged_vocab = bundled_vocab;
+    for word in &settings.custom_words {
+        if !merged_vocab.contains(word) {
+            merged_vocab.push(word.clone());
+        }
+    }
+
+    // Only update if there were changes
+    let changed = merged_vocab.len() != settings.custom_words.len();
+    if changed {
+        settings.custom_words = merged_vocab;
+        debug!(
+            "Merged bundled vocabulary: {} total words (user had: {})",
+            settings.custom_words.len(),
+            if had_custom_words { "some" } else { "none" }
+        );
+    }
+
+    changed
 }
 
 pub fn get_settings(app: &AppHandle) -> AppSettings {
@@ -642,28 +544,57 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
     let mut settings = if let Some(settings_value) = store.get("settings") {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
-            store.set("settings", serde_json::to_value(&default_settings).unwrap());
+            if let Ok(value) = serde_json::to_value(&default_settings) {
+                store.set("settings", value);
+            } else {
+                warn!("Failed to serialize default settings");
+            }
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
-        store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        if let Ok(value) = serde_json::to_value(&default_settings) {
+            store.set("settings", value);
+        } else {
+            warn!("Failed to serialize default settings");
+        }
         default_settings
     };
 
-    if ensure_post_process_defaults(&mut settings) {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
+    let mut changed = false;
+
+    // Load and merge bundled custom vocabulary
+    if ensure_custom_vocab_defaults(app, &mut settings) {
+        changed = true;
+    }
+
+    if changed {
+        if let Ok(value) = serde_json::to_value(&settings) {
+            store.set("settings", value);
+        } else {
+            warn!("Failed to serialize settings after merging vocabulary");
+        }
     }
 
     settings
 }
 
 pub fn write_settings(app: &AppHandle, settings: AppSettings) {
+    // Validate custom words before saving
+    if let Err(e) = crate::validation::validate_custom_words(&settings.custom_words) {
+        warn!("Invalid custom words, skipping save: {}", e);
+        return;
+    }
+
     let store = app
         .store(SETTINGS_STORE_PATH)
         .expect("Failed to initialize store");
 
-    store.set("settings", serde_json::to_value(&settings).unwrap());
+    if let Ok(value) = serde_json::to_value(&settings) {
+        store.set("settings", value);
+    } else {
+        warn!("Failed to serialize settings in write_settings");
+    }
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
@@ -672,19 +603,18 @@ pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
     settings.bindings
 }
 
-pub fn get_stored_binding(app: &AppHandle, id: &str) -> ShortcutBinding {
+pub fn get_stored_binding(app: &AppHandle, id: &str) -> Option<ShortcutBinding> {
     let bindings = get_bindings(app);
-
-    let binding = bindings.get(id).unwrap().clone();
-
-    binding
+    bindings.get(id).cloned()
 }
 
+#[allow(dead_code)]
 pub fn get_history_limit(app: &AppHandle) -> usize {
     let settings = get_settings(app);
     settings.history_limit
 }
 
+#[allow(dead_code)]
 pub fn get_recording_retention_period(app: &AppHandle) -> RecordingRetentionPeriod {
     let settings = get_settings(app);
     settings.recording_retention_period

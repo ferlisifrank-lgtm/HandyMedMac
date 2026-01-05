@@ -2,6 +2,7 @@ use crate::managers::history::{HistoryEntry, HistoryManager};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
+#[allow(dead_code)]
 #[tauri::command]
 #[specta::specta]
 pub async fn get_history_entries(
@@ -14,6 +15,7 @@ pub async fn get_history_entries(
         .map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 #[specta::specta]
 pub async fn toggle_history_entry_saved(
@@ -27,6 +29,7 @@ pub async fn toggle_history_entry_saved(
         .map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 #[specta::specta]
 pub async fn get_audio_file_path(
@@ -40,6 +43,7 @@ pub async fn get_audio_file_path(
         .map(|s| s.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_history_entry(
@@ -53,6 +57,7 @@ pub async fn delete_history_entry(
         .map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 #[specta::specta]
 pub async fn update_history_limit(
@@ -71,6 +76,7 @@ pub async fn update_history_limit(
     Ok(())
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 #[specta::specta]
 pub async fn update_recording_retention_period(

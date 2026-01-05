@@ -164,9 +164,18 @@ impl AudioRecorder {
         T: Sample + SizedSample + Send + 'static,
         f32: cpal::FromSample<T>,
     {
-        let mut output_buffer = Vec::new();
+        // Pre-allocate two buffers for double-buffering (swap instead of clone)
+        let mut output_buffer_a = Vec::new();
+        let mut output_buffer_b = Vec::new();
+        let mut use_buffer_a = true;
 
         let stream_cb = move |data: &[T], _: &cpal::InputCallbackInfo| {
+            // Swap buffers to avoid cloning
+            let output_buffer = if use_buffer_a {
+                &mut output_buffer_a
+            } else {
+                &mut output_buffer_b
+            };
             output_buffer.clear();
 
             if channels == 1 {
@@ -187,9 +196,11 @@ impl AudioRecorder {
                 }
             }
 
-            if sample_tx.send(output_buffer.clone()).is_err() {
+            // Take ownership using mem::take, send it, swap buffers
+            if sample_tx.send(std::mem::take(output_buffer)).is_err() {
                 log::error!("Failed to send samples");
             }
+            use_buffer_a = !use_buffer_a;
         };
 
         device.build_input_stream(
@@ -287,12 +298,7 @@ fn run_consumer(
         }
     }
 
-    loop {
-        let raw = match sample_rx.recv() {
-            Ok(s) => s,
-            Err(_) => break, // stream closed
-        };
-
+    while let Ok(raw) = sample_rx.recv() {
         // ---------- spectrum processing ---------------------------------- //
         if let Some(buckets) = visualizer.feed(&raw) {
             if let Some(cb) = &level_cb {
