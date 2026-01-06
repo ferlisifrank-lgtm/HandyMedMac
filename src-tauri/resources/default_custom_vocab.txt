@@ -1,0 +1,559 @@
+# Default Custom Vocabulary
+# This file is bundled with Handy and provides a base set of custom words
+# Users can override this by editing their personal custom_medical_vocab.txt file
+# Lines starting with # are comments and will be ignored
+
+# MEDICAL TERMS (one per line)
+# Add medical terms that should be recognized
+bronchoscopy
+colonoscopy
+myocarditis
+
+# CORRECTIONS (format: wrong phrase -> correct phrase)
+# Use -> to separate the incorrect phrase from the correct one
+high cholesterol -> hypercholesterolemia
+
+# CANADIAN SPELLINGS (format: US spelling -> Canadian spelling)
+# Convert American spellings to Canadian
+color -> colour
+
+# Common Medications - Generic Names
+acetaminophen
+acetylsalicylic acid
+celecoxib
+diclofenac
+ibuprofen
+indomethacin
+ketorolac
+naproxen
+
+# Cardiovascular - Generic
+amlodipine
+apixaban
+atenolol
+atorvastatin
+bempedoic acid
+bempedoic acid + ezetimibe
+bisoprolol
+candesartan
+carvedilol
+clopidogrel
+dabigatran
+diltiazem
+enalapril
+fenofibrate
+furosemide
+gemfibrozil
+hydrochlorothiazide
+irbesartan
+lisinopril
+losartan
+metoprolol
+perindopril
+pravastatin
+ramipril
+rivaroxaban
+rosuvastatin
+sacubitril + valsartan
+simvastatin
+spironolactone
+telmisartan
+tolvaptan
+valsartan
+warfarin
+
+# Diabetes - Generic
+canagliflozin
+dapagliflozin
+empagliflozin
+ertugliflozin
+ertugliflozin + metformin
+ertugliflozin + sitagliptin
+glyburide
+gliclazide
+glimepiride
+insulin
+insulin degludec
+insulin glargine
+liraglutide
+lixisenatide
+liraglutide
+metformin
+semaglutide
+semaglutide oral
+sitagliptin
+
+# Gastrointestinal - Generic
+ascites
+colitis
+constipation
+duodenitis
+gastroscopy
+gastritis
+gastroenteritis
+hemorrhoids
+lactulose
+loperamide
+mesalamine
+metoclopramide
+nausea
+ondansetron
+pantoprazole
+polyethylene glycol
+ranitidine
+rifaximin
+sennosides
+vomiting
+
+# Respiratory - Generic
+atelectasis
+budesonide
+ciclesonide
+emphysema
+fluticasone
+fluticasone furoate
+fluticasone furoate + vilanterol
+formoterol
+ipratropium
+mometasone
+montelukast
+salbutamol
+salmeterol
+terbutaline
+tiotropium
+umeclidinium
+umeclidinium + vilanterol
+
+# Antibiotics - Generic
+amoxicillin
+azithromycin
+ceftriaxone
+cephalexin
+cefuroxime
+ciprofloxacin
+clarithromycin
+clindamycin
+doxycycline
+erythromycin
+levofloxacin
+metronidazole
+moxifloxacin
+nitrofurantoin
+penicillin
+sulfamethoxazole
+trimethoprim
+
+# Antidepressants - Generic
+amitriptyline
+bupropion
+citalopram
+desvenlafaxine
+duloxetine
+escitalopram
+fluoxetine
+mirtazapine
+nortriptyline
+paroxetine
+sertraline
+trazodone
+venlafaxine
+
+# Anxiolytics/Sedatives - Generic
+alprazolam
+clonazepam
+diazepam
+lorazepam
+melatonin
+zopiclone
+zolpidem
+
+# Antipsychotics - Generic
+aripiprazole
+brexpiprazole
+cariprazine
+haloperidol
+olanzapine
+quetiapine
+risperidone
+
+# Thyroid - Generic
+levothyroxine
+liothyronine
+methimazole
+propylthiouracil
+
+# Pain - Generic
+codeine
+fentanyl
+gabapentin
+hydromorphone
+morphine
+nortriptyline
+oxycodone
+pregabalin
+tramadol
+
+# Antihistamines - Generic
+cetirizine
+chlorpheniramine
+desloratadine
+diphenhydramine
+fexofenadine
+loratadine
+
+# Topical - Generic
+betamethasone
+clobetasol
+clotrimazole
+fusidic acid
+hydrocortisone
+ketoconazole
+miconazole
+mometasone
+mupirocin
+triamcinolone
+
+# Osteoporosis - Generic
+alendronate
+calcium
+cholecalciferol
+denosumab
+risedronate
+vitamin D
+
+# Urological - Generic
+dutasteride
+finasteride
+oxybutynin
+solifenacin
+tamsulosin
+tolterodine
+
+# Other - Generic
+allopurinol
+colchicine
+dexamethasone
+methylprednisolone
+prednisone
+
+# Diagnostic Tests – Generic
+arthrocentesis
+biopsy
+colposcopy
+computed tomography
+cystoscopy
+echocardiogram
+electrocardiogram
+endoscopy
+gastroscopy
+laparoscopy
+magnetic resonance imaging
+mammography
+papanicolaou test
+paracentesis
+polysomnography
+spirometry
+thoracentesis
+ultrasound
+ureteroscopy
+
+# Conditions – Generic
+abscess
+abrasion
+anal fissure
+aneurysm
+angina
+appendicitis
+arrhythmia
+ascites
+atelectasis
+bacteremia
+bradycardia
+bronchitis
+bursitis
+cellulitis
+cholecystitis
+cirrhosis
+colitis
+concussion
+constipation
+contusion
+cystitis
+dehydration
+diarrhea
+diverticulitis
+diverticulosis
+dyspepsia
+dysphagia
+edema
+embolism
+encephalitis
+encephalopathy
+emphysema
+fistula
+gastritis
+gastroenteritis
+hematemesis
+hematoma
+hematuria
+hemorrhoids
+hyperglycemia
+hypertension
+hypoglycemia
+hypotension
+infarction
+ischemia
+ketoacidosis
+ketosis
+laceration
+leukocytosis
+lymphadenopathy
+malnutrition
+melena
+meningitis
+myopathy
+nausea
+nephrolithiasis
+neuropathy
+odynophagia
+osteomyelitis
+pancreatitis
+pericarditis
+pleural effusion
+pneumonia
+pneumothorax
+proteinuria
+pyelonephritis
+radiculopathy
+rectal bleeding
+septicemia
+tachycardia
+tenosynovitis
+thrombocytopenia
+thrombosis
+urosepsis
+vomiting
+
+# Brand Names - Analgesics
+Advil
+Aleve
+Anaprox
+Celebrex
+Motrin
+Tylenol
+Voltaren
+
+# Brand Names - Cardiovascular
+Altace
+Aldactone
+Cozaar
+Coumadin
+Crestor
+Diovan
+Eliquis
+Entresto
+Lasix
+Lipitor
+Lopressor
+Micardis
+Nexletol
+Nexlizet
+Plavix
+Pradaxa
+Prinivil
+Pravachol
+Tenormin
+Vasotec
+Xarelto
+Zestril
+Zocor
+
+# Brand Names - Diabetes
+Diamicron
+Diabeta
+Forxiga
+Glucophage
+Invokana
+Januvia
+Jardiance
+Mounjaro
+Ozempic
+Rybelsus
+Saxenda
+Segluromet
+Soliqua
+Steglatro
+Steglujan
+Toujeo
+Trulicity
+Tresiba
+Victoza
+Xultophy
+Zepbound
+
+# Brand Names - Gastrointestinal
+Imodium
+Laxaday
+Losec
+Motilium
+Nexium
+Pentasa
+Pepcid
+Prevacid
+Restoralax
+Senokot
+Zantac
+Zaxine
+Zofran
+
+# Brand Names - Respiratory
+Alvesco
+Anoro Ellipta
+Arnuity Ellipta
+Atrovent
+Breo Ellipta
+Bricanyl
+Flovent
+Incruse Ellipta
+Nasonex
+Pulmicort
+Qvar
+Singulair
+Spiriva
+Trelegy Ellipta
+Ventolin
+
+# Brand Names - Antibiotics
+Augmentin
+Bactrim
+Biaxin
+Cipro
+Clavulin
+Flagyl
+Keflex
+Levaquin
+Macrobid
+Septra
+
+# Brand Names - Antidepressants
+Celexa
+Cipralex
+Cymbalta
+Effexor
+Elavil
+Paxil
+Prozac
+Pristiq
+Remeron
+Wellbutrin
+Zoloft
+
+# Brand Names - Anxiolytics
+Ambien
+Ativan
+Imovane
+Rivotril
+Valium
+Xanax
+
+# Brand Names - Antipsychotics
+Abilify
+Haldol
+Rexulti
+Risperdal
+Seroquel
+Vraylar
+Zyprexa
+
+# Brand Names - Thyroid
+Cytomel
+Synthroid
+Tapazole
+
+# Brand Names - Pain
+Dilaudid
+Lyrica
+MS Contin
+Neurontin
+OxyContin
+Percocet
+Tramacet
+Tylenol 3
+
+# Brand Names - Antihistamines
+Aerius
+Allegra
+Benadryl
+Claritin
+Reactine
+
+# Brand Names - Topical
+Bactroban
+Betaderm
+Canesten
+Cortate
+Dermovate
+Elocom
+Fucidin
+
+# Brand Names - Osteoporosis
+Actonel
+Fosamax
+Prolia
+
+# Brand Names - Urological
+Avodart
+Detrol
+Ditropan
+Flomax
+Proscar
+Vesicare
+
+# Brand Names - Other
+Colcrys
+Decadron
+Medrol
+Prednisone
+Zyloprim
+
+# Add your custom terms below this line
+# ----------------------------------------
+
+# Doctor Names
+#Gen Surg
+Dr. El-Salviti
+Dr. Humphrey
+Dr. Swart
+Dr. Macleod
+Dr. Metz
+Dr. Laczko
+# OBGYN
+Dr. Matanovic
+Dr. Pun
+Dr. Snider
+Dr. Dhanani
+Dr. Cole
+#Ortho
+Dr. Petis
+Dr. Bigham
+Dr. Xenoyannis
+Dr. Tran
+#Urology
+Dr. Kamal
+Dr. Violette
+#Peds
+Dr. Aslam
+#Resp
+Dr. Sohaib
+#GI
+Dr. Jawaid
+#Internal
+Dr. Fullerton
+Dr. Evren
+Dr. Al-Mane
+#Family Doctors
+Dr. Labruzzo
+Dr. Anderson-Kay
+Dr. Onishenko
+Dr. Tam
+Dr. Nichols

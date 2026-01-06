@@ -2,13 +2,14 @@ use crate::audio_toolkit::{list_input_devices, vad::SmoothedVad, AudioRecorder, 
 use crate::helpers::clamshell;
 use crate::settings::{get_settings, AppSettings};
 use crate::utils;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::Instant;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
-fn set_mute(mute: bool) {
+/// Synchronous implementation of mute operation - runs on blocking thread pool
+fn set_mute_blocking(mute: bool) {
     // Expected behavior:
     // - Windows: works on most systems using standard audio drivers.
     // - Linux: works on many systems (PipeWire, PulseAudio, ALSA),
@@ -97,6 +98,14 @@ fn set_mute(mute: bool) {
     }
 }
 
+/// Async wrapper that runs mute operation on blocking thread pool
+/// This prevents blocking the async runtime during system audio calls
+fn set_mute(mute: bool) {
+    tokio::task::spawn_blocking(move || {
+        set_mute_blocking(mute);
+    });
+}
+
 const WHISPER_SAMPLE_RATE: usize = 16000;
 
 /* ──────────────────────────────────────────────────────────────── */
@@ -140,6 +149,26 @@ fn create_audio_recorder(
 
 /* ──────────────────────────────────────────────────────────────── */
 
+/// Microphone stream state to prevent race conditions
+struct MicrophoneStreamState {
+    /// Whether the microphone stream is currently open
+    is_open: bool,
+    /// Whether recording is actively in progress
+    is_recording: bool,
+    /// Whether system mute was applied by this manager
+    did_mute: bool,
+}
+
+impl MicrophoneStreamState {
+    fn new() -> Self {
+        Self {
+            is_open: false,
+            is_recording: false,
+            did_mute: false,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AudioRecordingManager {
     state: Arc<Mutex<RecordingState>>,
@@ -147,9 +176,8 @@ pub struct AudioRecordingManager {
     app_handle: tauri::AppHandle,
 
     recorder: Arc<Mutex<Option<AudioRecorder>>>,
-    is_open: Arc<Mutex<bool>>,
-    is_recording: Arc<Mutex<bool>>,
-    did_mute: Arc<Mutex<bool>>,
+    /// Consolidated stream state to prevent race conditions between flags
+    stream_state: Arc<Mutex<MicrophoneStreamState>>,
 }
 
 impl AudioRecordingManager {
@@ -169,9 +197,7 @@ impl AudioRecordingManager {
             app_handle: app.clone(),
 
             recorder: Arc::new(Mutex::new(None)),
-            is_open: Arc::new(Mutex::new(false)),
-            is_recording: Arc::new(Mutex::new(false)),
-            did_mute: Arc::new(Mutex::new(false)),
+            stream_state: Arc::new(Mutex::new(MicrophoneStreamState::new())),
         };
 
         // Always-on?  Open immediately.
@@ -200,12 +226,30 @@ impl AudioRecordingManager {
 
         // Find the device by name
         match list_input_devices() {
-            Ok(devices) => devices
-                .into_iter()
-                .find(|d| d.name == *device_name)
-                .map(|d| d.device),
+            Ok(devices) => {
+                let device = devices
+                    .into_iter()
+                    .find(|d| d.name == *device_name)
+                    .map(|d| d.device);
+
+                if device.is_none() {
+                    warn!("Selected device '{}' not found, using default", device_name);
+                }
+                device
+            }
             Err(e) => {
-                debug!("Failed to list devices, using default: {}", e);
+                warn!(
+                    "Failed to enumerate audio devices, using default device: {}",
+                    e
+                );
+                // Emit event to notify frontend about device enumeration failure
+                let _ = self.app_handle.emit(
+                    "audio-device-enumeration-failed",
+                    serde_json::json!({
+                        "error": e.to_string(),
+                        "fallback": "default device"
+                    }),
+                );
                 None
             }
         }
@@ -216,28 +260,28 @@ impl AudioRecordingManager {
     /// Applies mute if mute_while_recording is enabled and stream is open
     pub fn apply_mute(&self) {
         let settings = get_settings(&self.app_handle);
-        let mut did_mute_guard = self.did_mute.lock();
+        let mut stream = self.stream_state.lock();
 
-        if settings.mute_while_recording && *self.is_open.lock() {
+        if settings.mute_while_recording && stream.is_open && !stream.did_mute {
             set_mute(true);
-            *did_mute_guard = true;
+            stream.did_mute = true;
             debug!("Mute applied");
         }
     }
 
     /// Removes mute if it was applied
     pub fn remove_mute(&self) {
-        let mut did_mute_guard = self.did_mute.lock();
-        if *did_mute_guard {
+        let mut stream = self.stream_state.lock();
+        if stream.did_mute {
             set_mute(false);
-            *did_mute_guard = false;
+            stream.did_mute = false;
             debug!("Mute removed");
         }
     }
 
     pub fn start_microphone_stream(&self) -> Result<(), anyhow::Error> {
-        let mut open_flag = self.is_open.lock();
-        if *open_flag {
+        let mut stream = self.stream_state.lock();
+        if stream.is_open {
             debug!("Microphone stream already active");
             return Ok(());
         }
@@ -245,8 +289,7 @@ impl AudioRecordingManager {
         let start_time = Instant::now();
 
         // Don't mute immediately - caller will handle muting after audio feedback
-        let mut did_mute_guard = self.did_mute.lock();
-        *did_mute_guard = false;
+        stream.did_mute = false;
 
         let vad_path = self
             .app_handle
@@ -274,7 +317,8 @@ impl AudioRecordingManager {
                 .map_err(|e| anyhow::anyhow!("Failed to open recorder: {}", e))?;
         }
 
-        *open_flag = true;
+        stream.is_open = true;
+        drop(stream); // Release lock before logging
         info!(
             "Microphone stream initialized in {:?}",
             start_time.elapsed()
@@ -283,27 +327,28 @@ impl AudioRecordingManager {
     }
 
     pub fn stop_microphone_stream(&self) {
-        let mut open_flag = self.is_open.lock();
-        if !*open_flag {
+        let mut stream = self.stream_state.lock();
+        if !stream.is_open {
             return;
         }
 
-        let mut did_mute_guard = self.did_mute.lock();
-        if *did_mute_guard {
+        // Unmute if we previously muted
+        if stream.did_mute {
             set_mute(false);
+            stream.did_mute = false;
         }
-        *did_mute_guard = false;
 
         if let Some(rec) = self.recorder.lock().as_mut() {
             // If still recording, stop first.
-            if *self.is_recording.lock() {
+            if stream.is_recording {
                 let _ = rec.stop();
-                *self.is_recording.lock() = false;
+                stream.is_recording = false;
             }
             let _ = rec.close();
         }
 
-        *open_flag = false;
+        stream.is_open = false;
+        drop(stream); // Release lock before logging
         debug!("Microphone stream stopped");
     }
 
@@ -333,38 +378,37 @@ impl AudioRecordingManager {
 
     /* ---------- recording --------------------------------------------------- */
 
-    pub fn try_start_recording(&self, binding_id: &str) -> bool {
+    pub fn try_start_recording(&self, binding_id: &str) -> Result<(), String> {
         let mut state = self.state.lock();
 
         if let RecordingState::Idle = *state {
             // Ensure microphone is open in on-demand mode
             if matches!(*self.mode.lock(), MicrophoneMode::OnDemand) {
-                if let Err(e) = self.start_microphone_stream() {
-                    error!("Failed to open microphone stream: {e}");
-                    return false;
-                }
+                self.start_microphone_stream()
+                    .map_err(|e| format!("Failed to open microphone stream: {}", e))?;
             }
 
             if let Some(rec) = self.recorder.lock().as_ref() {
-                if rec.start().is_ok() {
-                    *self.is_recording.lock() = true;
-                    *state = RecordingState::Recording {
-                        binding_id: binding_id.to_string(),
-                    };
-                    debug!("Recording started for binding {binding_id}");
-                    return true;
-                }
+                rec.start()
+                    .map_err(|e| format!("Failed to start recording: {}", e))?;
+
+                self.stream_state.lock().is_recording = true;
+                *state = RecordingState::Recording {
+                    binding_id: binding_id.to_string(),
+                };
+                debug!("Recording started for binding {binding_id}");
+                Ok(())
+            } else {
+                Err("Recorder not initialized".to_string())
             }
-            error!("Recorder not available");
-            false
         } else {
-            false
+            Err("Recording already in progress".to_string())
         }
     }
 
     pub fn update_selected_device(&self) -> Result<(), anyhow::Error> {
         // If currently open, restart the microphone stream to use the new device
-        if *self.is_open.lock() {
+        if self.stream_state.lock().is_open {
             self.stop_microphone_stream();
             self.start_microphone_stream()?;
         }
@@ -394,7 +438,7 @@ impl AudioRecordingManager {
                     Vec::new()
                 };
 
-                *self.is_recording.lock() = false;
+                self.stream_state.lock().is_recording = false;
 
                 // In on-demand mode turn the mic off again
                 if matches!(*self.mode.lock(), MicrophoneMode::OnDemand) {
@@ -433,7 +477,7 @@ impl AudioRecordingManager {
                 let _ = rec.stop(); // Discard the result
             }
 
-            *self.is_recording.lock() = false;
+            self.stream_state.lock().is_recording = false;
 
             // In on-demand mode turn the mic off again
             if matches!(*self.mode.lock(), MicrophoneMode::OnDemand) {

@@ -199,7 +199,9 @@ pub fn validate_model_id(model_id: &str) -> Result<(), String> {
         .chars()
         .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
-        return Err("Model ID contains invalid characters (only alphanumeric, -, _, . allowed)".to_string());
+        return Err(
+            "Model ID contains invalid characters (only alphanumeric, -, _, . allowed)".to_string(),
+        );
     }
 
     Ok(())

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { AppSettings as Settings, AudioDevice } from "@/bindings";
 
@@ -10,7 +11,6 @@ interface UseSettingsReturn {
   audioDevices: AudioDevice[];
   outputDevices: AudioDevice[];
   audioFeedbackEnabled: boolean;
-  postProcessModelOptions: Record<string, string[]>;
 
   // Actions
   updateSetting: <K extends keyof Settings>(
@@ -29,29 +29,39 @@ interface UseSettingsReturn {
   // Convenience getters
   getSetting: <K extends keyof Settings>(key: K) => Settings[K] | undefined;
 
-  // Post-processing helpers
-  setPostProcessProvider: (providerId: string) => Promise<void>;
-  updatePostProcessBaseUrl: (
-    providerId: string,
-    baseUrl: string,
-  ) => Promise<void>;
-  updatePostProcessApiKey: (
-    providerId: string,
-    apiKey: string,
-  ) => Promise<void>;
-  updatePostProcessModel: (providerId: string, model: string) => Promise<void>;
-  fetchPostProcessModels: (providerId: string) => Promise<string[]>;
+  // EPHEMERAL MODE: Post-processing helpers removed - LLM features disabled
 }
 
 export const useSettings = (): UseSettingsReturn => {
-  const store = useSettingsStore();
+  // Use shallow comparison to prevent unnecessary re-renders when state object reference changes
+  // but actual values haven't changed
+  const store = useSettingsStore(
+    useShallow((state) => ({
+      settings: state.settings,
+      isLoading: state.isLoading,
+      isUpdatingKey: state.isUpdatingKey,
+      audioDevices: state.audioDevices,
+      outputDevices: state.outputDevices,
+      updateSetting: state.updateSetting,
+      resetSetting: state.resetSetting,
+      refreshSettings: state.refreshSettings,
+      refreshAudioDevices: state.refreshAudioDevices,
+      refreshOutputDevices: state.refreshOutputDevices,
+      updateBinding: state.updateBinding,
+      resetBinding: state.resetBinding,
+      getSetting: state.getSetting,
+      initialize: state.initialize,
+    })),
+  );
 
   // Initialize on first mount
+  // Note: store.isLoading and store.initialize are stable references from useShallow
   useEffect(() => {
     if (store.isLoading) {
       store.initialize();
     }
-  }, [store.initialize, store.isLoading]);
+    // Only depend on isLoading since initialize is a stable reference
+  }, [store.isLoading, store.initialize]);
 
   return {
     settings: store.settings,
@@ -60,7 +70,6 @@ export const useSettings = (): UseSettingsReturn => {
     audioDevices: store.audioDevices,
     outputDevices: store.outputDevices,
     audioFeedbackEnabled: store.settings?.audio_feedback || false,
-    postProcessModelOptions: store.postProcessModelOptions,
     updateSetting: store.updateSetting,
     resetSetting: store.resetSetting,
     refreshSettings: store.refreshSettings,
@@ -69,10 +78,6 @@ export const useSettings = (): UseSettingsReturn => {
     updateBinding: store.updateBinding,
     resetBinding: store.resetBinding,
     getSetting: store.getSetting,
-    setPostProcessProvider: store.setPostProcessProvider,
-    updatePostProcessBaseUrl: store.updatePostProcessBaseUrl,
-    updatePostProcessApiKey: store.updatePostProcessApiKey,
-    updatePostProcessModel: store.updatePostProcessModel,
-    fetchPostProcessModels: store.fetchPostProcessModels,
+    // EPHEMERAL MODE: Post-processing methods removed - LLM features disabled
   };
 };

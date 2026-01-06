@@ -164,7 +164,7 @@ esophagus -> oesophagus
                             } else {
                                 self.common_corrections
                                     .entry(correct.clone())
-                                    .or_insert_with(Vec::new)
+                                    .or_default()
                                     .push(wrong);
                             }
                         }
@@ -672,7 +672,7 @@ mod tests {
 
     #[test]
     fn test_canadian_spelling() {
-        let vocab = MedicalVocabulary::new();
+        let mut vocab = MedicalVocabulary::new();
         let result = vocab.process_text("The patient has anemia and edema.");
         assert!(result.contains("anaemia"));
         assert!(result.contains("oedema"));
@@ -680,7 +680,7 @@ mod tests {
 
     #[test]
     fn test_medical_corrections() {
-        let vocab = MedicalVocabulary::new();
+        let mut vocab = MedicalVocabulary::new();
         let result = vocab.process_text("Patient has high per tension and a fib.");
         assert!(result.contains("hypertension"));
         assert!(result.contains("atrial fibrillation"));
@@ -688,7 +688,7 @@ mod tests {
 
     #[test]
     fn test_medication_corrections() {
-        let vocab = MedicalVocabulary::new();
+        let mut vocab = MedicalVocabulary::new();
         let result = vocab.process_text("Prescribed met formin and lysinopril.");
         assert!(result.contains("metformin"));
         assert!(result.contains("lisinopril"));
@@ -696,7 +696,7 @@ mod tests {
 
     #[test]
     fn test_number_formatting() {
-        let vocab = MedicalVocabulary::new();
+        let mut vocab = MedicalVocabulary::new();
         let result = vocab.process_text("Give twenty five milligrams and fifty kilograms.");
         assert!(result.contains("25 mg"));
         assert!(result.contains("50 kg"));

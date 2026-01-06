@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 use tar::Archive;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -580,6 +580,34 @@ impl ModelManager {
             fs::create_dir_all(&temp_extract_dir)?;
 
             // Open the downloaded tar.gz file
+            let tar_gz = File::open(&partial_path)?;
+            let tar = GzDecoder::new(tar_gz);
+            let mut archive = Archive::new(tar);
+
+            // Validate archive entries for security (prevent path traversal attacks)
+            for entry_result in archive.entries()? {
+                let entry = entry_result?;
+                let entry_path = entry.path()?;
+
+                // Check for absolute paths or parent directory traversal
+                if entry_path.is_absolute() {
+                    return Err(anyhow::anyhow!(
+                        "Malicious archive: contains absolute path '{}'",
+                        entry_path.display()
+                    ));
+                }
+
+                for component in entry_path.components() {
+                    if component == Component::ParentDir {
+                        return Err(anyhow::anyhow!(
+                            "Malicious archive: contains parent directory traversal in '{}'",
+                            entry_path.display()
+                        ));
+                    }
+                }
+            }
+
+            // Re-open the archive for extraction (entries iterator consumed above)
             let tar_gz = File::open(&partial_path)?;
             let tar = GzDecoder::new(tar_gz);
             let mut archive = Archive::new(tar);

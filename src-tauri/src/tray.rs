@@ -1,5 +1,6 @@
 use crate::settings;
 use crate::tray_i18n::get_tray_translations;
+use log::error;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIcon;
@@ -76,6 +77,16 @@ pub fn change_tray_icon(app: &AppHandle, icon: TrayIconState) {
 }
 
 pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&str>) {
+    if let Err(e) = try_update_tray_menu(app, state, locale) {
+        error!("Failed to update tray menu: {}", e);
+    }
+}
+
+fn try_update_tray_menu(
+    app: &AppHandle,
+    state: &TrayIconState,
+    locale: Option<&str>,
+) -> Result<(), String> {
     let settings = settings::get_settings(app);
 
     let locale = locale.unwrap_or(&settings.app_language);
@@ -94,7 +105,7 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
         format!("Handy v{}", env!("CARGO_PKG_VERSION"))
     };
     let version_i = MenuItem::with_id(app, "version", &version_label, false, None::<&str>)
-        .expect("failed to create version item");
+        .map_err(|e| format!("Failed to create version menu item: {}", e))?;
     let settings_i = MenuItem::with_id(
         app,
         "settings",
@@ -102,53 +113,59 @@ pub fn update_tray_menu(app: &AppHandle, state: &TrayIconState, locale: Option<&
         true,
         settings_accelerator,
     )
-    .expect("failed to create settings item");
-    let check_updates_i = MenuItem::with_id(
-        app,
-        "check_updates",
-        &strings.check_updates,
-        settings.update_checks_enabled,
-        None::<&str>,
-    )
-    .expect("failed to create check updates item");
+    .map_err(|e| format!("Failed to create settings menu item: {}", e))?;
+    // let check_updates_i = MenuItem::with_id(
+    //     app,
+    //     "check_updates",
+    //     &strings.check_updates,
+    //     settings.update_checks_enabled,
+    //     None::<&str>,
+    // )
+    // .map_err(|e| format!("Failed to create check updates menu item: {}", e))?;
     let quit_i = MenuItem::with_id(app, "quit", &strings.quit, true, quit_accelerator)
-        .expect("failed to create quit item");
-    let separator = || PredefinedMenuItem::separator(app).expect("failed to create separator");
+        .map_err(|e| format!("Failed to create quit menu item: {}", e))?;
+    let separator = || {
+        PredefinedMenuItem::separator(app).map_err(|e| format!("Failed to create separator: {}", e))
+    };
 
     let menu = match state {
         TrayIconState::Recording | TrayIconState::Transcribing => {
             let cancel_i = MenuItem::with_id(app, "cancel", &strings.cancel, true, None::<&str>)
-                .expect("failed to create cancel item");
+                .map_err(|e| format!("Failed to create cancel menu item: {}", e))?;
             Menu::with_items(
                 app,
                 &[
                     &version_i,
-                    &separator(),
+                    &separator()?,
                     &cancel_i,
-                    &separator(),
+                    &separator()?,
                     &settings_i,
-                    &check_updates_i,
-                    &separator(),
+                    // &check_updates_i,
+                    &separator()?,
                     &quit_i,
                 ],
             )
-            .expect("failed to create menu")
+            .map_err(|e| format!("Failed to create recording menu: {}", e))?
         }
         TrayIconState::Idle => Menu::with_items(
             app,
             &[
                 &version_i,
-                &separator(),
+                &separator()?,
                 &settings_i,
-                &check_updates_i,
-                &separator(),
+                // &check_updates_i,
+                &separator()?,
                 &quit_i,
             ],
         )
-        .expect("failed to create menu"),
+        .map_err(|e| format!("Failed to create idle menu: {}", e))?,
     };
 
     let tray = app.state::<TrayIcon>();
-    let _ = tray.set_menu(Some(menu));
-    let _ = tray.set_icon_as_template(true);
+    tray.set_menu(Some(menu))
+        .map_err(|e| format!("Failed to set tray menu: {}", e))?;
+    tray.set_icon_as_template(true)
+        .map_err(|e| format!("Failed to set icon as template: {}", e))?;
+
+    Ok(())
 }

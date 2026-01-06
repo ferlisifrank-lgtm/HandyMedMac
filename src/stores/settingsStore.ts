@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
-import type { AppSettings as Settings, AudioDevice, LogLevel } from "@/bindings";
+import type {
+  AppSettings as Settings,
+  AudioDevice,
+  LogLevel,
+} from "@/bindings";
 import { commands } from "@/bindings";
 
 interface SettingsStore {

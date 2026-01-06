@@ -8,13 +8,12 @@ import { SettingsGroup } from "../../ui/SettingsGroup";
 import { HistoryLimit } from "../HistoryLimit";
 import { AlwaysOnMicrophone } from "../AlwaysOnMicrophone";
 import { SoundPicker } from "../SoundPicker";
-import { PostProcessingToggle } from "../PostProcessingToggle";
 import { MuteWhileRecording } from "../MuteWhileRecording";
 import { AppendTrailingSpace } from "../AppendTrailingSpace";
 import { RecordingRetentionPeriodSelector } from "../RecordingRetentionPeriod";
 import { ClamshellMicrophoneSelector } from "../ClamshellMicrophoneSelector";
 import { HandyShortcut } from "../HandyShortcut";
-import { UpdateChecksToggle } from "../UpdateChecksToggle";
+// import { UpdateChecksToggle } from "../UpdateChecksToggle";
 import { useSettings } from "../../../hooks/useSettings";
 
 export const DebugSettings: React.FC = () => {
@@ -28,7 +27,7 @@ export const DebugSettings: React.FC = () => {
       <SettingsGroup title={t("settings.debug.title")}>
         <LogDirectory grouped={true} />
         <LogLevelSelector grouped={true} />
-        <UpdateChecksToggle descriptionMode="tooltip" grouped={true} />
+        {/* <UpdateChecksToggle descriptionMode="tooltip" grouped={true} /> */}
         <SoundPicker
           label={t("settings.debug.soundTheme.label")}
           description={t("settings.debug.soundTheme.description")}
@@ -41,7 +40,6 @@ export const DebugSettings: React.FC = () => {
         />
         <AlwaysOnMicrophone descriptionMode="tooltip" grouped={true} />
         <ClamshellMicrophoneSelector descriptionMode="tooltip" grouped={true} />
-        <PostProcessingToggle descriptionMode="tooltip" grouped={true} />
         <MuteWhileRecording descriptionMode="tooltip" grouped={true} />
         <AppendTrailingSpace descriptionMode="tooltip" grouped={true} />
         {/* Cancel shortcut is disabled on Linux due to instability with dynamic shortcut registration */}

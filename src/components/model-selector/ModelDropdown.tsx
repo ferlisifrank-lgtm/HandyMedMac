@@ -184,7 +184,7 @@ const ModelDropdown: React.FC<ModelDropdownProps> = ({
                   <div>
                     <div className="text-sm">
                       {getTranslatedModelName(model, t)}
-                      {model.id === "parakeet-tdt-0.6b-v3" && isFirstRun && (
+                      {model.platform_recommended && (
                         <span className="ml-2 text-xs bg-logo-primary/20 text-logo-primary px-1.5 py-0.5 rounded">
                           {t("onboarding.recommended")}
                         </span>

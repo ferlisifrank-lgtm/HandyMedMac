@@ -1,11 +1,12 @@
 pub mod audio;
 pub mod history;
+pub mod medical;
 pub mod models;
 pub mod transcription;
-pub mod medical;
 
 use crate::settings::{get_settings, write_settings, AppSettings, LogLevel};
 use crate::utils::cancel_current_operation;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
@@ -67,23 +68,24 @@ pub fn set_log_level(app: AppHandle, level: LogLevel) -> Result<(), String> {
     Ok(())
 }
 
-#[specta::specta]
-#[tauri::command]
-pub fn open_recordings_folder(app: AppHandle) -> Result<(), String> {
-    let app_data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
-
-    let recordings_dir = app_data_dir.join("recordings");
-
-    let path = recordings_dir.to_string_lossy().as_ref().to_string();
-    app.opener()
-        .open_path(path, None::<String>)
-        .map_err(|e| format!("Failed to open recordings folder: {}", e))?;
-
-    Ok(())
-}
+// EPHEMERAL MODE: Recordings folder command disabled - no audio files saved
+// #[specta::specta]
+// #[tauri::command]
+// pub fn open_recordings_folder(app: AppHandle) -> Result<(), String> {
+//     let app_data_dir = app
+//         .path()
+//         .app_data_dir()
+//         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+//
+//     let recordings_dir = app_data_dir.join("recordings");
+//
+//     let path = recordings_dir.to_string_lossy().as_ref().to_string();
+//     app.opener()
+//         .open_path(path, None::<String>)
+//         .map_err(|e| format!("Failed to open recordings folder: {}", e))?;
+//
+//     Ok(())
+// }
 
 #[specta::specta]
 #[tauri::command]
@@ -115,4 +117,55 @@ pub fn open_app_data_dir(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("Failed to open app data directory: {}", e))?;
 
     Ok(())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn restart_app(app: AppHandle) -> Result<(), String> {
+    app.restart();
+}
+
+#[derive(Debug, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GithubRelease {
+    pub tag_name: String,
+    pub name: String,
+    pub html_url: String,
+    pub published_at: String,
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn check_github_release() -> Result<Option<GithubRelease>, String> {
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+
+    // Use blocking reqwest for simplicity
+    let client = reqwest::blocking::Client::builder()
+        .user_agent("Handy")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get("https://api.github.com/repos/ferlisifrank-lgtm/HandyMedMac/releases/latest")
+        .send()
+        .map_err(|e| format!("Failed to fetch release: {}", e))?;
+
+    if !response.status().is_success() {
+        return Ok(None);
+    }
+
+    let release: GithubRelease = response
+        .json()
+        .map_err(|e| format!("Failed to parse release: {}", e))?;
+
+    // Remove 'v' prefix from tag name if present
+    let release_version = release.tag_name.trim_start_matches('v');
+
+    // Check if release version is newer than current version
+    if release_version != current_version {
+        Ok(Some(release))
+    } else {
+        Ok(None)
+    }
 }

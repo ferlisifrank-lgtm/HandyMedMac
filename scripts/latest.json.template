@@ -1,0 +1,11 @@
+{
+  "version": "${VERSION}",
+  "notes": "${RELEASE_NOTES}",
+  "pub_date": "${PUB_DATE}",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "${AARCH64_SIGNATURE}",
+      "url": "https://github.com/ferlisifrank-lgtm/HandyMedMac/releases/download/v${VERSION}/Handy_${VERSION}_aarch64.app.tar.gz"
+    }
+  }
+}

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { listen } from "@tauri-apps/api/event";
-import { ProgressBar } from "../shared";
 import { useSettings } from "../../hooks/useSettings";
+import { commands } from "../../bindings";
+import { open } from "@tauri-apps/plugin-shell";
 
 interface UpdateCheckerProps {
   className?: string;
@@ -15,8 +14,7 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   // Update checking state
   const [isChecking, setIsChecking] = useState(false);
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [releaseUrl, setReleaseUrl] = useState<string>("");
   const [showUpToDate, setShowUpToDate] = useState(false);
 
   const { settings, isLoading } = useSettings();
@@ -25,8 +23,6 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
   const upToDateTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const isManualCheckRef = useRef(false);
-  const downloadedBytesRef = useRef(0);
-  const contentLengthRef = useRef(0);
 
   useEffect(() => {
     // Wait for settings to load before doing anything
@@ -63,10 +59,11 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
     try {
       setIsChecking(true);
-      const update = await check();
+      const result = await commands.checkGithubRelease();
 
-      if (update) {
+      if (result.status === "ok" && result.data) {
         setUpdateAvailable(true);
+        setReleaseUrl(result.data.htmlUrl);
         setShowUpToDate(false);
       } else {
         setUpdateAvailable(false);
@@ -95,47 +92,13 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
     checkForUpdates();
   };
 
-  const installUpdate = async () => {
-    if (!updateChecksEnabled) return;
-    try {
-      setIsInstalling(true);
-      setDownloadProgress(0);
-      downloadedBytesRef.current = 0;
-      contentLengthRef.current = 0;
-      const update = await check();
-
-      if (!update) {
-        console.log("No update available during install attempt");
-        return;
+  const openReleaseUrl = async () => {
+    if (releaseUrl) {
+      try {
+        await open(releaseUrl);
+      } catch (error) {
+        console.error("Failed to open release URL:", error);
       }
-
-      await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case "Started":
-            downloadedBytesRef.current = 0;
-            contentLengthRef.current = event.data.contentLength ?? 0;
-            break;
-          case "Progress":
-            downloadedBytesRef.current += event.data.chunkLength;
-            const progress =
-              contentLengthRef.current > 0
-                ? Math.round(
-                    (downloadedBytesRef.current / contentLengthRef.current) *
-                      100,
-                  )
-                : 0;
-            setDownloadProgress(Math.min(progress, 100));
-            break;
-        }
-      });
-      await relaunch();
-    } catch (error) {
-      console.error("Failed to install update:", error);
-    } finally {
-      setIsInstalling(false);
-      setDownloadProgress(0);
-      downloadedBytesRef.current = 0;
-      contentLengthRef.current = 0;
     }
   };
 
@@ -143,15 +106,6 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
   const getUpdateStatusText = () => {
     if (!updateChecksEnabled) {
       return t("footer.updateCheckingDisabled");
-    }
-    if (isInstalling) {
-      return downloadProgress > 0 && downloadProgress < 100
-        ? t("footer.downloading", {
-            progress: downloadProgress.toString().padStart(3),
-          })
-        : downloadProgress === 100
-          ? t("footer.installing")
-          : t("footer.preparing");
     }
     if (isChecking) return t("footer.checkingUpdates");
     if (showUpToDate) return t("footer.upToDate");
@@ -161,13 +115,12 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
 
   const getUpdateStatusAction = () => {
     if (!updateChecksEnabled) return undefined;
-    if (updateAvailable && !isInstalling) return installUpdate;
-    if (!isChecking && !isInstalling && !updateAvailable)
-      return handleManualUpdateCheck;
+    if (updateAvailable) return openReleaseUrl;
+    if (!isChecking && !updateAvailable) return handleManualUpdateCheck;
     return undefined;
   };
 
-  const isUpdateDisabled = !updateChecksEnabled || isChecking || isInstalling;
+  const isUpdateDisabled = !updateChecksEnabled || isChecking;
   const isUpdateClickable =
     !isUpdateDisabled && (updateAvailable || (!isChecking && !showUpToDate));
 
@@ -189,18 +142,6 @@ const UpdateChecker: React.FC<UpdateCheckerProps> = ({ className = "" }) => {
         <span className="text-text/60 tabular-nums">
           {getUpdateStatusText()}
         </span>
-      )}
-
-      {isInstalling && downloadProgress > 0 && downloadProgress < 100 && (
-        <ProgressBar
-          progress={[
-            {
-              id: "update",
-              percentage: downloadProgress,
-            },
-          ]}
-          size="large"
-        />
       )}
     </div>
   );

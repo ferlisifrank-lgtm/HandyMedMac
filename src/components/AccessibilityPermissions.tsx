@@ -4,6 +4,7 @@ import {
   checkAccessibilityPermission,
   requestAccessibilityPermission,
 } from "tauri-plugin-macos-permissions-api";
+import { commands } from "@/bindings";
 
 // Define permission state type
 type PermissionState = "request" | "verify" | "granted";
@@ -77,20 +78,38 @@ const AccessibilityPermissions: React.FC = () => {
 
   const config = buttonConfig[permissionState] as ButtonConfig;
 
+  const handleRestartClick = async (): Promise<void> => {
+    try {
+      await commands.restartApp();
+    } catch (error) {
+      console.error("Error restarting app:", error);
+    }
+  };
+
   return (
     <div className="p-4 w-full rounded-lg border border-mid-gray">
-      <div className="flex justify-between items-center gap-2">
-        <div className="">
-          <p className="text-sm font-medium">
+      <div className="flex flex-col gap-3">
+        <div>
+          <p className="text-sm font-semibold mb-2">
             {t("accessibility.permissionsDescription")}
           </p>
+          <div className="text-sm text-text/70 space-y-1">
+            <p>{t("accessibility.instructionsStep1")}</p>
+            <p>{t("accessibility.instructionsStep2")}</p>
+            <p>{t("accessibility.instructionsStep3")}</p>
+          </div>
         </div>
-        <button
-          onClick={handleButtonClick}
-          className={`min-h-10 ${config.className}`}
-        >
-          {config.text}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleButtonClick} className={config.className}>
+            {config.text}
+          </button>
+          <button
+            onClick={handleRestartClick}
+            className="px-3 py-1 text-sm font-semibold bg-logo-primary text-white hover:bg-logo-primary/90 rounded cursor-pointer"
+          >
+            {t("accessibility.restartApp")}
+          </button>
+        </div>
       </div>
     </div>
   );

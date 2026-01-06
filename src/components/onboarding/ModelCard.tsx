@@ -56,6 +56,9 @@ const ModelCard: React.FC<ModelCardProps> = ({
           {isFeatured && (
             <Badge variant="primary">{t("onboarding.recommended")}</Badge>
           )}
+          {!isFeatured && model.platform_recommended && (
+            <Badge variant="primary">{t("onboarding.recommended")}</Badge>
+          )}
         </div>
         <p className="text-text/60 text-sm leading-relaxed">
           {displayDescription}

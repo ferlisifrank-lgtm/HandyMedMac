@@ -13,6 +13,35 @@
     "debug": "Debug",
     "about": "About"
   },
+  "setup": {
+    "welcome": "Welcome to Handy",
+    "subtitle": "Let's get you set up in just a few steps",
+    "step": "Step {{current}} of {{total}}",
+    "next": "Continue",
+    "skip": "Skip",
+    "finish": "Get Started",
+    "permissions": {
+      "title": "Enable Accessibility Permissions",
+      "description": "Handy needs accessibility permissions to paste transcribed text directly into your applications.",
+      "step1": "Click 'Open System Settings' below",
+      "step2": "Find and enable Handy in Accessibility permissions",
+      "step3": "Come back here when you're done",
+      "openSettings": "Open System Settings",
+      "checkStatus": "Check Permission Status",
+      "granted": "Permissions granted! You're all set.",
+      "notGranted": "Permissions not yet granted"
+    },
+    "medical": {
+      "title": "Medical Mode (Optional)",
+      "description": "Medical mode applies specialized vocabulary corrections for Canadian medical terminology during transcription.",
+      "consentTitle": "Privacy & Data Processing",
+      "consentText": "When enabled, Medical Mode processes your transcriptions to recognize and correct medical terms. All processing happens locally on your device. No data is sent to external servers.",
+      "enableLabel": "Enable Medical Mode",
+      "enableDescription": "Apply Canadian medical vocabulary corrections",
+      "learnMore": "Learn more about Medical Mode",
+      "pipedaCompliance": "This feature follows PIPEDA guidelines for consent and data handling."
+    }
+  },
   "onboarding": {
     "subtitle": "To get started, choose a transcription model",
     "recommended": "Recommended",
@@ -201,6 +230,11 @@
         "placeholder": "Add a word",
         "add": "Add",
         "remove": "Remove {{word}}"
+      },
+      "customVocabulary": {
+        "title": "Custom Medical Vocabulary",
+        "description": "Add your own medical terms and corrections",
+        "openFile": "Open Vocabulary File"
       }
     },
     "postProcessing": {
@@ -403,7 +437,11 @@
   "accessibility": {
     "permissionsRequired": "Accessibility Permissions Required",
     "permissionsDescription": "Handy needs accessibility permissions to type transcribed text.",
+    "instructionsStep1": "1. Click the button below to open System Settings",
+    "instructionsStep2": "2. Find and enable Handy in the Accessibility permissions",
+    "instructionsStep3": "3. Restart Handy for the permissions to take effect",
     "openSettings": "Open System Settings",
+    "restartApp": "Restart Handy",
     "dismiss": "Dismiss"
   },
   "errors": {
@@ -415,5 +453,16 @@
   },
   "overlay": {
     "transcribing": "Transcribing..."
+  },
+  "privacy": {
+    "ephemeralMode": {
+      "title": "Privacy-First",
+      "description": "Handy operates in ephemeral mode for maximum privacy compliance:",
+      "noAudioSaved": "Audio recordings are not saved to disk",
+      "noTranscriptsSaved": "Transcriptions are not saved to disk",
+      "clipboardOnly": "Text is processed in-memory and pasted directly to your active application",
+      "localProcessing": "All processing happens locally on your device",
+      "warning": "Note: By default, Handy uses direct paste which bypasses your system clipboard entirely. If you change the paste method, clipboard managers may retain the text."
+    }
   }
 }

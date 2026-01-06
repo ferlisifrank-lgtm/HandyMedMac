@@ -1,16 +1,16 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Cog, FlaskConical, History, Info, Sparkles } from "lucide-react";
+import { Cog, FlaskConical, Info } from "lucide-react";
 import HandyTextLogo from "./icons/HandyTextLogo";
 import HandyHand from "./icons/HandyHand";
 import { useSettings } from "../hooks/useSettings";
 import {
   GeneralSettings,
   AdvancedSettings,
-  HistorySettings,
+  // EPHEMERAL MODE: History settings removed - no persistent storage
+  // HistorySettings,
   DebugSettings,
   AboutSettings,
-  PostProcessingSettings,
 } from "./settings";
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
@@ -43,18 +43,13 @@ export const SECTIONS_CONFIG = {
     component: AdvancedSettings,
     enabled: () => true,
   },
-  postprocessing: {
-    labelKey: "sidebar.postProcessing",
-    icon: Sparkles,
-    component: PostProcessingSettings,
-    enabled: (settings) => settings?.post_process_enabled ?? false,
-  },
-  history: {
-    labelKey: "sidebar.history",
-    icon: History,
-    component: HistorySettings,
-    enabled: () => true,
-  },
+  // EPHEMERAL MODE: History tab removed - no persistent storage
+  // history: {
+  //   labelKey: "sidebar.history",
+  //   icon: History,
+  //   component: HistorySettings,
+  //   enabled: () => true,
+  // },
   debug: {
     labelKey: "sidebar.debug",
     icon: FlaskConical,
@@ -81,9 +76,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { t } = useTranslation();
   const { settings } = useSettings();
 
-  const availableSections = Object.entries(SECTIONS_CONFIG)
-    .filter(([_, config]) => config.enabled(settings))
-    .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
+  const availableSections = React.useMemo(
+    () =>
+      Object.entries(SECTIONS_CONFIG)
+        .filter(([_, config]) => config.enabled(settings))
+        .map(([id, config]) => ({ id: id as SidebarSection, ...config })),
+    [settings?.debug_mode],
+  );
 
   return (
     <div className="flex flex-col w-40 h-full border-r border-mid-gray/20 items-center px-2">

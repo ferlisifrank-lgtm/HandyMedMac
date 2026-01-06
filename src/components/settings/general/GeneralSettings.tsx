@@ -9,12 +9,14 @@ import { PushToTalk } from "../PushToTalk";
 import { AudioFeedback } from "../AudioFeedback";
 import { useSettings } from "../../../hooks/useSettings";
 import { VolumeSlider } from "../VolumeSlider";
+import EphemeralModeNotice from "../../EphemeralModeNotice";
 
-export const GeneralSettings: React.FC = () => {
+export const GeneralSettings: React.FC = React.memo(() => {
   const { t } = useTranslation();
   const { audioFeedbackEnabled } = useSettings();
   return (
     <div className="max-w-3xl w-full mx-auto space-y-6">
+      <EphemeralModeNotice />
       <SettingsGroup title={t("settings.general.title")}>
         <HandyShortcut shortcutId="transcribe" grouped={true} />
         <LanguageSelector descriptionMode="tooltip" grouped={true} />
@@ -32,4 +34,4 @@ export const GeneralSettings: React.FC = () => {
       </SettingsGroup>
     </div>
   );
-};
+});

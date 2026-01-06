@@ -107,3 +107,6 @@ windows = { version = "0.61.3", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", branch = "v2.1" }
 macos-accessibility-client = "0.0.1"
+
+[patch.crates-io]
+transcribe-rs = { path = "../libs/transcribe-rs" }

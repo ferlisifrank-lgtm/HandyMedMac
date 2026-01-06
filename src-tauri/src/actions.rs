@@ -3,16 +3,13 @@ use crate::medical_vocab::MedicalVocabulary;
 // // // use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::managers::audio::AudioRecordingManager;
-use crate::managers::history::HistoryManager;
+// EPHEMERAL MODE: HistoryManager no longer used
+// use crate::managers::history::HistoryManager;
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings::{get_settings, AppSettings};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{self, show_recording_overlay, show_transcribing_overlay};
-use async_openai::types::{
-    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
-    CreateChatCompletionRequestArgs,
-};
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
 use log::{debug, error};
 use once_cell::sync::Lazy;
@@ -31,143 +28,8 @@ pub trait ShortcutAction: Send + Sync {
 // Transcribe Action
 struct TranscribeAction;
 
-async fn maybe_post_process_transcription(
-    settings: &AppSettings,
-    transcription: &str,
-) -> Option<String> {
-    if !settings.post_process_enabled {
-        return None;
-    }
-
-    let provider = match settings.active_post_process_provider().cloned() {
-        Some(provider) => provider,
-        None => {
-            debug!("Post-processing enabled but no provider is selected");
-            return None;
-        }
-    };
-
-    let model = settings
-        .post_process_models
-        .get(&provider.id)
-        .cloned()
-        .unwrap_or_default();
-
-    if model.trim().is_empty() {
-        debug!(
-            "Post-processing skipped because provider '{}' has no model configured",
-            provider.id
-        );
-        return None;
-    }
-
-    let selected_prompt_id = match &settings.post_process_selected_prompt_id {
-        Some(id) => id.clone(),
-        None => {
-            debug!("Post-processing skipped because no prompt is selected");
-            return None;
-        }
-    };
-
-    let prompt = match settings
-        .post_process_prompts
-        .iter()
-        .find(|prompt| prompt.id == selected_prompt_id)
-    {
-        Some(prompt) => prompt.prompt.clone(),
-        None => {
-            debug!(
-                "Post-processing skipped because prompt '{}' was not found",
-                selected_prompt_id
-            );
-            return None;
-        }
-    };
-
-    if prompt.trim().is_empty() {
-        debug!("Post-processing skipped because the selected prompt is empty");
-        return None;
-    }
-
-    debug!(
-        "Starting LLM post-processing with provider '{}' (model: {})",
-        provider.id, model
-    );
-
-    // Replace ${output} variable in the prompt with the actual text
-    let processed_prompt = prompt.replace("${output}", transcription);
-    debug!("Processed prompt length: {} chars", processed_prompt.len());
-
- // Apple Intelligence removed - not supported on this macOS version
-// if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
-//     ...entire block commented out...
-// }
-
-    let api_key = settings
-        .post_process_api_keys
-        .get(&provider.id)
-        .cloned()
-        .unwrap_or_default();
-
-    // Create OpenAI-compatible client
-    let client = match crate::llm_client::create_client(&provider, api_key) {
-        Ok(client) => client,
-        Err(e) => {
-            error!("Failed to create LLM client: {}", e);
-            return None;
-        }
-    };
-
-    // Build the chat completion request
-    let message = match ChatCompletionRequestUserMessageArgs::default()
-        .content(processed_prompt)
-        .build()
-    {
-        Ok(msg) => ChatCompletionRequestMessage::User(msg),
-        Err(e) => {
-            error!("Failed to build chat message: {}", e);
-            return None;
-        }
-    };
-
-    let request = match CreateChatCompletionRequestArgs::default()
-        .model(&model)
-        .messages(vec![message])
-        .build()
-    {
-        Ok(req) => req,
-        Err(e) => {
-            error!("Failed to build chat completion request: {}", e);
-            return None;
-        }
-    };
-
-    // Send the request
-    match client.chat().create(request).await {
-        Ok(response) => {
-            if let Some(choice) = response.choices.first() {
-                if let Some(content) = &choice.message.content {
-                    debug!(
-                        "LLM post-processing succeeded for provider '{}'. Output length: {} chars",
-                        provider.id,
-                        content.len()
-                    );
-                    return Some(content.clone());
-                }
-            }
-            error!("LLM API response has no content");
-            None
-        }
-        Err(e) => {
-            error!(
-                "LLM post-processing failed for provider '{}': {}. Falling back to original transcription.",
-                provider.id,
-                e
-            );
-            None
-        }
-    }
-}
+// LLM post-processing has been removed for privacy and HIPAA compliance
+// All transcription is now processed locally only
 
 async fn maybe_convert_chinese_variant(
     settings: &AppSettings,
@@ -233,44 +95,55 @@ impl ShortcutAction for TranscribeAction {
         let is_always_on = settings.always_on_microphone;
         debug!("Microphone mode - always_on: {}", is_always_on);
 
-        let mut recording_started = false;
-        if is_always_on {
+        let recording_started = if is_always_on {
             // Always-on mode: Play audio feedback immediately, then apply mute after sound finishes
             debug!("Always-on mode: Playing audio feedback immediately");
             let rm_clone = Arc::clone(&rm);
             let app_clone = app.clone();
             // The blocking helper exits immediately if audio feedback is disabled,
             // so we can always reuse this thread to ensure mute happens right after playback.
-            std::thread::spawn(move || {
+            tauri::async_runtime::spawn_blocking(move || {
                 play_feedback_sound_blocking(&app_clone, SoundType::Start);
                 rm_clone.apply_mute();
             });
 
-            recording_started = rm.try_start_recording(&binding_id);
-            debug!("Recording started: {}", recording_started);
+            match rm.try_start_recording(&binding_id) {
+                Ok(()) => {
+                    debug!("Recording started successfully");
+                    true
+                }
+                Err(e) => {
+                    error!("Failed to start recording: {}", e);
+                    false
+                }
+            }
         } else {
             // On-demand mode: Start recording first, then play audio feedback, then apply mute
             // This allows the microphone to be activated before playing the sound
             debug!("On-demand mode: Starting recording first, then audio feedback");
             let recording_start_time = Instant::now();
-            if rm.try_start_recording(&binding_id) {
-                recording_started = true;
-                debug!("Recording started in {:?}", recording_start_time.elapsed());
-                // Small delay to ensure microphone stream is active
-                let app_clone = app.clone();
-                let rm_clone = Arc::clone(&rm);
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                    debug!("Handling delayed audio feedback/mute sequence");
-                    // Helper handles disabled audio feedback by returning early, so we reuse it
-                    // to keep mute sequencing consistent in every mode.
-                    play_feedback_sound_blocking(&app_clone, SoundType::Start);
-                    rm_clone.apply_mute();
-                });
-            } else {
-                debug!("Failed to start recording");
+            match rm.try_start_recording(&binding_id) {
+                Ok(()) => {
+                    debug!("Recording started in {:?}", recording_start_time.elapsed());
+                    // Small delay to ensure microphone stream is active
+                    let app_clone = app.clone();
+                    let rm_clone = Arc::clone(&rm);
+                    tauri::async_runtime::spawn_blocking(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        debug!("Handling delayed audio feedback/mute sequence");
+                        // Helper handles disabled audio feedback by returning early, so we reuse it
+                        // to keep mute sequencing consistent in every mode.
+                        play_feedback_sound_blocking(&app_clone, SoundType::Start);
+                        rm_clone.apply_mute();
+                    });
+                    true
+                }
+                Err(e) => {
+                    error!("Failed to start recording: {}", e);
+                    false
+                }
             }
-        }
+        };
 
         if recording_started {
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
@@ -293,7 +166,6 @@ impl ShortcutAction for TranscribeAction {
         let ah = app.clone();
         let rm = Arc::clone(&app.state::<Arc<AudioRecordingManager>>());
         let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
-        let hm = Arc::clone(&app.state::<Arc<HistoryManager>>());
 
         change_tray_icon(app, TrayIconState::Transcribing);
         show_transcribing_overlay(app);
@@ -322,7 +194,6 @@ impl ShortcutAction for TranscribeAction {
                 );
 
                 let transcription_time = Instant::now();
-                let samples_clone = samples.clone(); // Clone for history saving
                 match tm.transcribe(samples) {
                     Ok(transcription) => {
                         debug!(
@@ -334,56 +205,22 @@ impl ShortcutAction for TranscribeAction {
                             let settings = get_settings(&ah);
                             let mut final_text = transcription.clone();
 
-           // Apply medical vocabulary processing if enabled
-            if settings.medical_mode_enabled {
-                let mut medical_vocab = MedicalVocabulary::new();
-                final_text = medical_vocab.process_text(&final_text);
-            }
-                            let mut post_processed_text: Option<String> = None;
-                            let mut post_process_prompt: Option<String> = None;
+                            // Apply medical vocabulary processing if enabled
+                            if settings.medical_mode_enabled {
+                                let mut medical_vocab = MedicalVocabulary::new();
+                                final_text = medical_vocab.process_text(&final_text);
+                            }
 
-                            // First, check if Chinese variant conversion is needed
+                            // Check if Chinese variant conversion is needed (local processing only)
                             if let Some(converted_text) =
                                 maybe_convert_chinese_variant(&settings, &transcription).await
                             {
-                                final_text = converted_text.clone();
-                                post_processed_text = Some(converted_text);
-                            }
-                            // Then apply regular post-processing if enabled
-                            else if let Some(processed_text) =
-                                maybe_post_process_transcription(&settings, &transcription).await
-                            {
-                                final_text = processed_text.clone();
-                                post_processed_text = Some(processed_text);
-
-                                // Get the prompt that was used
-                                if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
-                                    if let Some(prompt) = settings
-                                        .post_process_prompts
-                                        .iter()
-                                        .find(|p| &p.id == prompt_id)
-                                    {
-                                        post_process_prompt = Some(prompt.prompt.clone());
-                                    }
-                                }
+                                final_text = converted_text;
                             }
 
-                            // Save to history with post-processed text and prompt
-                            let hm_clone = Arc::clone(&hm);
-                            let transcription_for_history = transcription.clone();
-                            tauri::async_runtime::spawn(async move {
-                                if let Err(e) = hm_clone
-                                    .save_transcription(
-                                        samples_clone,
-                                        transcription_for_history,
-                                        post_processed_text,
-                                        post_process_prompt,
-                                    )
-                                    .await
-                                {
-                                    error!("Failed to save transcription to history: {}", e);
-                                }
-                            });
+                            // EPHEMERAL MODE: Transcriptions are not saved to disk
+                            // Audio and text are processed in-memory only for privacy compliance
+                            // This eliminates the need for data-at-rest encryption (PIPEDA Section 4.5)
 
                             // Paste the final text (either processed or original)
                             let ah_clone = ah.clone();

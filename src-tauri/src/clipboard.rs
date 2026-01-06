@@ -145,10 +145,21 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
 
     info!("Using paste method: {:?}", paste_method);
 
-    // Get the managed Enigo instance
-    let enigo_state = app_handle
-        .try_state::<EnigoState>()
-        .ok_or("Enigo state not initialized")?;
+    // Get the managed Enigo instance, or initialize it lazily if not yet available
+    // This handles the case where accessibility permissions were granted after app startup
+    let enigo_state = match app_handle.try_state::<EnigoState>() {
+        Some(state) => state,
+        None => {
+            // Try to initialize Enigo now (permissions might have been granted)
+            info!("Enigo not initialized, attempting lazy initialization...");
+            let new_state = EnigoState::new()
+                .map_err(|e| format!("Enigo initialization failed. Please grant accessibility permissions in System Settings > Privacy & Security > Accessibility. Error: {}", e))?;
+            app_handle.manage(new_state);
+            app_handle
+                .try_state::<EnigoState>()
+                .ok_or("Failed to register Enigo state")?
+        }
+    };
     let mut enigo = enigo_state
         .0
         .lock()

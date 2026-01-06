@@ -28,7 +28,7 @@ impl SmoothedVad {
             prefill_frames,
             hangover_frames,
             onset_frames,
-            frame_buffer: VecDeque::new(),
+            frame_buffer: VecDeque::with_capacity(prefill_frames + 1),
             hangover_counter: 0,
             onset_counter: 0,
             in_speech: false,
@@ -39,18 +39,18 @@ impl SmoothedVad {
 
 impl VoiceActivityDetector for SmoothedVad {
     fn push_frame<'a>(&'a mut self, frame: &'a [f32]) -> Result<VadFrame<'a>> {
-        // 1. Buffer every incoming frame for possible pre-roll
-        self.frame_buffer.push_back(frame.to_vec());
-        while self.frame_buffer.len() > self.prefill_frames + 1 {
-            self.frame_buffer.pop_front();
-        }
-
-        // 2. Delegate to the wrapped boolean VAD
+        // 2. Delegate to the wrapped boolean VAD first (before buffering)
         let is_voice = self.inner_vad.is_voice(frame)?;
 
         match (self.in_speech, is_voice) {
             // Potential start of speech - need to accumulate onset frames
             (false, true) => {
+                // 1. Buffer frame for possible pre-roll (only when potentially starting speech)
+                self.frame_buffer.push_back(frame.to_vec());
+                while self.frame_buffer.len() > self.prefill_frames + 1 {
+                    self.frame_buffer.pop_front();
+                }
+
                 self.onset_counter += 1;
                 if self.onset_counter >= self.onset_frames {
                     // We have enough consecutive voice frames to trigger speech
@@ -58,7 +58,7 @@ impl VoiceActivityDetector for SmoothedVad {
                     self.hangover_counter = self.hangover_frames;
                     self.onset_counter = 0; // Reset for next time
 
-                    // Collect prefill + current frame
+                    // Collect prefill + current frame (reuse temp_out buffer)
                     self.temp_out.clear();
                     for buf in &self.frame_buffer {
                         self.temp_out.extend(buf);
@@ -83,6 +83,7 @@ impl VoiceActivityDetector for SmoothedVad {
                     Ok(VadFrame::Speech(frame))
                 } else {
                     self.in_speech = false;
+                    self.frame_buffer.clear(); // Clear buffer when speech ends
                     Ok(VadFrame::Noise)
                 }
             }
@@ -90,6 +91,13 @@ impl VoiceActivityDetector for SmoothedVad {
             // Silence or broken onset sequence
             (false, false) => {
                 self.onset_counter = 0; // Reset onset counter on silence
+                                        // Keep buffer for potential upcoming speech (but limit size)
+                if self.frame_buffer.len() > self.prefill_frames {
+                    self.frame_buffer.pop_front();
+                }
+                if !self.frame_buffer.is_empty() {
+                    self.frame_buffer.push_back(frame.to_vec());
+                }
                 Ok(VadFrame::Noise)
             }
         }

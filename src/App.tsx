@@ -4,6 +4,7 @@ import "./App.css";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
 import Onboarding from "./components/onboarding";
+import { SetupWizard } from "./components/setup";
 import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import { useSettings } from "./hooks/useSettings";
 import { commands } from "@/bindings";
@@ -15,13 +16,14 @@ const renderSettingsContent = (section: SidebarSection) => {
 };
 
 function App() {
+  const [showSetup, setShowSetup] = useState<boolean | null>(null);
   const [showOnboarding, setShowOnboarding] = useState<boolean | null>(null);
   const [currentSection, setCurrentSection] =
     useState<SidebarSection>("general");
   const { settings, updateSetting } = useSettings();
 
   useEffect(() => {
-    checkOnboardingStatus();
+    checkAppStatus();
   }, []);
 
   // Handle keyboard shortcuts for debug mode toggle
@@ -49,19 +51,40 @@ function App() {
     };
   }, [settings?.debug_mode, updateSetting]);
 
-  const checkOnboardingStatus = async () => {
+  const checkAppStatus = async () => {
     try {
-      // Always check if they have any models available
-      const result = await commands.hasAnyModelsAvailable();
-      if (result.status === "ok") {
-        setShowOnboarding(!result.data);
+      // First check if setup has been completed
+      const settingsResult = await commands.getAppSettings();
+      if (settingsResult.status === "ok") {
+        const setupCompleted = settingsResult.data.setup_completed ?? false;
+
+        if (!setupCompleted) {
+          setShowSetup(true);
+          setShowOnboarding(false);
+          return;
+        }
+      }
+
+      // If setup is complete, check if they have any models
+      const modelsResult = await commands.hasAnyModelsAvailable();
+      if (modelsResult.status === "ok") {
+        setShowSetup(false);
+        setShowOnboarding(!modelsResult.data);
       } else {
+        setShowSetup(false);
         setShowOnboarding(true);
       }
     } catch (error) {
-      console.error("Failed to check onboarding status:", error);
+      console.error("Failed to check app status:", error);
+      setShowSetup(false);
       setShowOnboarding(true);
     }
+  };
+
+  const handleSetupComplete = () => {
+    setShowSetup(false);
+    // After setup, check if they need to download a model
+    checkAppStatus();
   };
 
   const handleModelSelected = () => {
@@ -69,6 +92,12 @@ function App() {
     setShowOnboarding(false);
   };
 
+  // Show setup wizard if not yet completed
+  if (showSetup) {
+    return <SetupWizard onComplete={handleSetupComplete} />;
+  }
+
+  // Show onboarding (model download) if no models available
   if (showOnboarding) {
     return <Onboarding onModelSelected={handleModelSelected} />;
   }

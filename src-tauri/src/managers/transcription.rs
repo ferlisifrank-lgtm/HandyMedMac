@@ -230,8 +230,15 @@ impl TranscriptionManager {
                 let mut engine = ParakeetEngine::new();
                 // Use Int8 quantization for optimal performance
                 // Int8 provides ~2x faster inference with minimal accuracy trade-off
+                // Configure threading for CPU inference (use all available cores)
+                let num_threads = std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4); // Fallback to 4 threads if detection fails
+
+                let params = ParakeetModelParams::int8().with_threads(Some(num_threads));
+
                 engine
-                    .load_model_with_params(&model_path, ParakeetModelParams::int8())
+                    .load_model_with_params(&model_path, params)
                     .map_err(|e| {
                         let error_msg =
                             format!("Failed to load parakeet model {}: {}", model_id, e);
@@ -287,17 +294,32 @@ impl TranscriptionManager {
             return;
         }
 
+        // Set is_loading to true BEFORE spawning to prevent race condition
+        // where multiple threads could pass the check above before the spawn completes
         *is_loading = true;
+
         let self_clone = self.clone();
-        thread::spawn(move || {
-            let settings = get_settings(&self_clone.app_handle);
-            if let Err(e) = self_clone.load_model(&settings.selected_model) {
-                error!("Failed to load model: {}", e);
+        match thread::Builder::new()
+            .name("model-loader".to_string())
+            .spawn(move || {
+                let settings = get_settings(&self_clone.app_handle);
+                if let Err(e) = self_clone.load_model(&settings.selected_model) {
+                    error!("Failed to load model: {}", e);
+                }
+                let mut is_loading = self_clone.is_loading.lock();
+                *is_loading = false;
+                self_clone.loading_condvar.notify_all();
+            }) {
+            Ok(_) => {
+                debug!("Model loading thread spawned successfully");
             }
-            let mut is_loading = self_clone.is_loading.lock();
-            *is_loading = false;
-            self_clone.loading_condvar.notify_all();
-        });
+            Err(e) => {
+                error!("Failed to spawn model loading thread: {}", e);
+                // Reset is_loading since the thread failed to start
+                *is_loading = false;
+                self.loading_condvar.notify_all();
+            }
+        }
     }
 
     pub fn get_current_model(&self) -> Option<String> {
@@ -341,22 +363,20 @@ impl TranscriptionManager {
         // Get current settings for configuration
         let settings = get_settings(&self.app_handle);
 
-        // Clone the Arc to the engine to transcribe outside the lock
-        // This allows other operations (like checking status) while inference runs
-        let engine_arc = self.engine.clone();
-
         // Perform transcription with the appropriate engine
-        // We use write lock for the minimal time needed to perform inference
+        // NOTE: We must hold the write lock for the entire inference duration because:
+        // 1. The transcribe_rs library engines require &mut self (not thread-safe internally)
+        // 2. The engines cannot be cloned or moved to another thread
+        // 3. This blocks concurrent operations (status checks, model unloads) during inference
+        // TODO: Consider refactoring to use a dedicated transcription thread with a work queue
+        //       to minimize lock contention and improve responsiveness
         let result = {
-            let mut engine_guard = engine_arc.write();
+            let mut engine_guard = self.engine.write();
             let engine = engine_guard.as_mut().ok_or_else(|| {
                 anyhow::anyhow!(
                     "Model failed to load after auto-load attempt. Please check your model settings."
                 )
             })?;
-
-            // IMPORTANT: We hold the write lock here during inference
-            // This is necessary because the engine methods require mutable access
             match engine {
                 LoadedEngine::Whisper(whisper_engine) => {
                     // Normalize language code for Whisper

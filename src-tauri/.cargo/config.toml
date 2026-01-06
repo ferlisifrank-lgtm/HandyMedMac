@@ -2,7 +2,7 @@
 # Disables Vulkan to avoid Windows path length issues
 
 [env]
-# Disable all GPU backends for whisper-rs-sys on Windows  
+# Disable all GPU backends for whisper-rs-sys on Windows
 GGML_VULKAN = { value = "OFF", condition = { target_os = "windows" } }
 GGML_CUDA = { value = "OFF", condition = { target_os = "windows" } }
 GGML_METAL = { value = "OFF", condition = { target_os = "windows" } }
@@ -10,3 +10,8 @@ WHISPER_NO_GPU = { value = "1", condition = { target_os = "windows" } }
 
 # Force CMake to skip Vulkan
 CMAKE_ARGS = { value = "-DGGML_VULKAN=OFF", condition = { target_os = "windows" } }
+
+# macOS deployment target for whisper-rs-sys compatibility
+MACOSX_DEPLOYMENT_TARGET = { value = "10.15", condition = { target_os = "macos" } }
+CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", condition = { target_os = "macos" } }
+CXXFLAGS = { value = "-mmacosx-version-min=10.15", condition = { target_os = "macos" } }

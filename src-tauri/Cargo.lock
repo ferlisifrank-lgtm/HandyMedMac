@@ -283,32 +283,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-openai"
-version = "0.30.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bf39a15c8d613eb61892dc9a287c02277639ebead41ee611ad23aaa613f1a82"
-dependencies = [
- "async-openai-macros",
- "backoff",
- "base64 0.22.1",
- "bytes",
- "derive_builder",
- "eventsource-stream",
- "futures",
- "rand 0.9.2",
- "reqwest",
- "reqwest-eventsource",
- "secrecy",
- "serde",
- "serde_json",
- "thiserror 2.0.17",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "tracing",
-]
-
-[[package]]
 name = "async-openai-macros"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,6 +500,16 @@ dependencies = [
  "radium",
  "tap",
  "wyz",
+]
+
+[[package]]
+name = "bk-tree"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8283fb8e64b873918f8bc527efa6aff34956296e48ea750a9c909cd47c01546"
+dependencies = [
+ "fnv",
+ "triple_accel",
 ]
 
 [[package]]
@@ -2401,10 +2385,10 @@ dependencies = [
 
 [[package]]
 name = "handy"
-version = "0.6.8"
+version = "0.6.9"
 dependencies = [
  "anyhow",
- "async-openai 0.30.1",
+ "bk-tree",
  "chrono",
  "cpal",
  "enigo",
@@ -2414,6 +2398,7 @@ dependencies = [
  "futures-util",
  "hound",
  "log",
+ "macos-accessibility-client",
  "natural",
  "once_cell",
  "parking_lot",
@@ -4884,6 +4869,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
@@ -6972,10 +6958,8 @@ dependencies = [
 [[package]]
 name = "transcribe-rs"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f01738c67d77f6dc84be57e376ec32f846c177c492e46f9685bdb2801870fe84"
 dependencies = [
- "async-openai 0.29.6",
+ "async-openai",
  "async-trait",
  "derive_builder",
  "env_logger",
@@ -7033,6 +7017,12 @@ dependencies = [
  "once_cell",
  "petgraph",
 ]
+
+[[package]]
+name = "triple_accel"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "622b09ce2fe2df4618636fb92176d205662f59803f39e70d1c333393082de96c"
 
 [[package]]
 name = "try-lock"
