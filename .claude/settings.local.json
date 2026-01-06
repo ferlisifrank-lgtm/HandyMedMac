@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun add:*)",
+      "Bash(bun run tauri build:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(cmd /c \"\"\"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\18\\\\BuildTools\\\\Common7\\\\Tools\\\\VsDevCmd.bat\"\" -arch=x64 && cd /d c:\\\\Users\\\\ferli\\\\Desktop\\\\Handy && bun run tauri build\")",
+      "Bash(cmd /c:*)"
+    ]
+  }
+}

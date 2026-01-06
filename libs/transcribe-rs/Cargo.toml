@@ -95,4 +95,5 @@ features = ["metal"]
 
 [target.'cfg(target_os = "windows")'.dependencies.whisper-rs]
 version = "0.15.1"
-features = ["vulkan"]
+# CPU-only on Windows to avoid Vulkan SDK requirement
+features = []
