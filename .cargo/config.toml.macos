@@ -1,0 +1,3 @@
+[build]
+# macOS builds use Metal GPU acceleration by default
+# No additional environment variables needed

@@ -1,0 +1,19 @@
+[build]
+
+[env]
+# Disable GPU acceleration for Windows builds to avoid Vulkan SDK issues
+# This forces whisper-rs to use CPU-only inference
+GGML_VULKAN = "OFF"
+GGML_CUDA = "OFF"
+GGML_METAL = "OFF"
+
+# Point to dummy Vulkan SDK directory to satisfy whisper-rs-sys linker checks
+# Create this directory structure before building:
+#   New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Lib"
+#   New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Include"
+#   New-Item -ItemType File -Force -Path "C:\VulkanSDK\Lib\vulkan-1.lib"
+VULKAN_SDK = "C:\\VulkanSDK"
+
+# Optional: Uncomment these to disable AVX instructions for older CPUs
+# WHISPER_NO_AVX = "ON"
+# WHISPER_NO_AVX2 = "ON"

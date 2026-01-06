@@ -5,5 +5,8 @@ dist/
 *.log
 .env
 
+# Platform-specific Cargo configuration (use setup-platform script)
+.cargo/config.toml
+
 # Release output directory
 release-output/
