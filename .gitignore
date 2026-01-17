@@ -10,3 +10,6 @@ dist/
 
 # Release output directory
 release-output/
+
+# Git worktrees
+.worktrees/
