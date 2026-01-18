@@ -34,7 +34,9 @@
       "Bash(cargo build:*)",
       "Bash(wc:*)",
       "Bash(cargo bench:*)",
-      "Bash(cargo run:*)"
+      "Bash(cargo run:*)",
+      "Skill(superpowers:finishing-a-development-branch)",
+      "Skill(superpowers:finishing-a-development-branch:*)"
     ]
   }
 }
