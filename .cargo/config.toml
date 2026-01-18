@@ -1,26 +1,3 @@
-# Windows-specific Cargo build configuration
-# This file overrides src-tauri/.cargo/config.toml for Windows builds
-
-[env]
-# Disable GPU acceleration for Windows builds to avoid Vulkan SDK issues
-# This forces whisper-rs to use CPU-only inference
-GGML_VULKAN = { value = "OFF", force = true }
-GGML_CUDA = { value = "OFF", force = true }
-GGML_METAL = { value = "OFF", force = true }
-WHISPER_NO_GPU = { value = "1", force = true }
-
-# Point to dummy Vulkan SDK directory to satisfy whisper-rs-sys linker checks
-# Create this directory structure before building:
-#   New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Lib"
-#   New-Item -ItemType Directory -Force -Path "C:\VulkanSDK\Include"
-#   New-Item -ItemType File -Force -Path "C:\VulkanSDK\Lib\vulkan-1.lib"
-VULKAN_SDK = { value = "C:\\VulkanSDK", force = true }
-
-# Force CMake to skip Vulkan
-CMAKE_ARGS = { value = "-DGGML_VULKAN=OFF", force = true }
-
-# Use Ninja generator to avoid VS version detection issues with cmake crate
-CMAKE_GENERATOR = { value = "Ninja", force = true }
-
-# Path to CMake bundled with Visual Studio Build Tools
-CMAKE = { value = "C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\bin\\cmake.exe", force = true }
+[build]
+# macOS builds use Metal GPU acceleration by default
+# No additional environment variables needed
