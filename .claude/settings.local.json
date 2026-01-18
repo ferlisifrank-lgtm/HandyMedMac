@@ -36,7 +36,8 @@
       "Bash(cargo bench:*)",
       "Bash(cargo run:*)",
       "Skill(superpowers:finishing-a-development-branch)",
-      "Skill(superpowers:finishing-a-development-branch:*)"
+      "Skill(superpowers:finishing-a-development-branch:*)",
+      "Bash(git worktree:*)"
     ]
   }
 }
