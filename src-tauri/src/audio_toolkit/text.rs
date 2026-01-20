@@ -515,6 +515,125 @@ pub fn normalize_measurements(text: &str) -> String {
     result
 }
 
+/// Normalizes spoken time phrases into numeric format
+///
+/// This function converts spoken time formats into numeric format like "10:15".
+///
+/// Supported formats:
+/// - "ten fifteen" → "10:15"
+/// - "ten oh five" → "10:05"
+/// - "ten o'clock" → "10:00"
+/// - "three forty-five" → "3:45"
+///
+/// # Arguments
+/// * `text` - The input text to normalize
+///
+/// # Returns
+/// The text with normalized time formats
+pub fn normalize_times(text: &str) -> String {
+    type ConverterFn = Box<dyn Fn(&regex::Captures) -> Option<String>>;
+
+    // Build pattern for hours (one through twelve)
+    let hour_words = r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)";
+
+    let patterns: Vec<(Regex, ConverterFn)> = vec![
+        // Pattern: "ten o'clock" → "10:00"
+        (
+            Regex::new(&format!(r"(?i)\b({})\s+o'?clock\b", hour_words)).unwrap(),
+            Box::new(|caps: &regex::Captures| -> Option<String> {
+                let hour_word = caps.get(1)?.as_str();
+                let hour = word_to_number(hour_word)?;
+                if (1..=12).contains(&hour) {
+                    Some(format!("{}:00", hour))
+                } else {
+                    None
+                }
+            }),
+        ),
+        // Pattern: "ten oh five" → "10:05" (single digit minutes with "oh")
+        (
+            Regex::new(&format!(
+                r"(?i)\b({})\s+oh\s+(one|two|three|four|five|six|seven|eight|nine)\b",
+                hour_words
+            ))
+            .unwrap(),
+            Box::new(|caps: &regex::Captures| -> Option<String> {
+                let hour_word = caps.get(1)?.as_str();
+                let minute_word = caps.get(2)?.as_str();
+                let hour = word_to_number(hour_word)?;
+                let minute = word_to_number(minute_word)?;
+                if (1..=12).contains(&hour) && (1..=9).contains(&minute) {
+                    Some(format!("{}:{:02}", hour, minute))
+                } else {
+                    None
+                }
+            }),
+        ),
+        // Pattern: "ten twenty-five" or "ten twenty five" → "10:25" (compound minutes)
+        (
+            Regex::new(&format!(
+                r"(?i)\b({})[\s-]+(twenty|thirty|forty|fifty)[\s-]+(one|two|three|four|five|six|seven|eight|nine)\b",
+                hour_words
+            ))
+            .unwrap(),
+            Box::new(|caps: &regex::Captures| -> Option<String> {
+                let hour_word = caps.get(1)?.as_str();
+                let tens_word = caps.get(2)?.as_str();
+                let ones_word = caps.get(3)?.as_str();
+                let hour = word_to_number(hour_word)?;
+                let tens = word_to_number(tens_word)?;
+                let ones = word_to_number(ones_word)?;
+                let minutes = tens + ones;
+                if (1..=12).contains(&hour) && (21..=59).contains(&minutes) {
+                    Some(format!("{}:{:02}", hour, minutes))
+                } else {
+                    None
+                }
+            }),
+        ),
+        // Pattern: "ten fifteen" → "10:15" (simple minutes 10-59)
+        (
+            Regex::new(&format!(
+                r"(?i)\b({})\s+(ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\b",
+                hour_words
+            ))
+            .unwrap(),
+            Box::new(|caps: &regex::Captures| -> Option<String> {
+                let hour_word = caps.get(1)?.as_str();
+                let minute_word = caps.get(2)?.as_str();
+                let hour = word_to_number(hour_word)?;
+                let minutes = word_to_number(minute_word)?;
+                if (1..=12).contains(&hour) && (10..=59).contains(&minutes) {
+                    Some(format!("{}:{:02}", hour, minutes))
+                } else {
+                    None
+                }
+            }),
+        ),
+    ];
+
+    let mut result = text.to_string();
+
+    for (pattern, converter) in patterns {
+        let mut replacements: Vec<(usize, usize, String)> = Vec::new();
+
+        for caps in pattern.captures_iter(&result) {
+            if let Some(replacement) = converter(&caps) {
+                if let Some(full_match) = caps.get(0) {
+                    replacements.push((full_match.start(), full_match.end(), replacement));
+                }
+            }
+        }
+
+        // Apply replacements in reverse order to maintain correct indices
+        for (start, end, replacement) in replacements.into_iter().rev() {
+            result.replace_range(start..end, &replacement);
+        }
+    }
+
+    result
+}
+
 /// Applies custom word corrections to transcribed text using fuzzy matching
 ///
 /// This function corrects words in the input text by finding the best matches
@@ -1004,5 +1123,58 @@ mod tests {
         assert_eq!(parse_spoken_number("one hundred"), Some(100));
         assert_eq!(parse_spoken_number("five hundred"), Some(500));
         assert_eq!(parse_spoken_number("one hundred fifty"), Some(150));
+    }
+
+    #[test]
+    fn test_normalize_times_oclock() {
+        assert_eq!(normalize_times("at ten o'clock"), "at 10:00");
+        assert_eq!(normalize_times("three oclock"), "3:00");
+        assert_eq!(normalize_times("at twelve o'clock"), "at 12:00");
+    }
+
+    #[test]
+    fn test_normalize_times_oh_minutes() {
+        assert_eq!(normalize_times("ten oh five"), "10:05");
+        assert_eq!(normalize_times("at three oh nine"), "at 3:09");
+        assert_eq!(normalize_times("eleven oh one"), "11:01");
+    }
+
+    #[test]
+    fn test_normalize_times_simple_minutes() {
+        assert_eq!(normalize_times("ten fifteen"), "10:15");
+        assert_eq!(normalize_times("three twenty"), "3:20");
+        assert_eq!(normalize_times("twelve fifty"), "12:50");
+        assert_eq!(normalize_times("at five ten"), "at 5:10");
+    }
+
+    #[test]
+    fn test_normalize_times_compound_minutes() {
+        assert_eq!(normalize_times("ten twenty-five"), "10:25");
+        assert_eq!(normalize_times("three forty five"), "3:45");
+        assert_eq!(normalize_times("at seven thirty-nine"), "at 7:39");
+    }
+
+    #[test]
+    fn test_normalize_times_mixed_text() {
+        assert_eq!(
+            normalize_times("The meeting is at ten fifteen"),
+            "The meeting is at 10:15"
+        );
+        assert_eq!(
+            normalize_times("Call me at three o'clock or four thirty"),
+            "Call me at 3:00 or 4:30"
+        );
+    }
+
+    #[test]
+    fn test_normalize_times_no_match() {
+        let text = "Hello world with no times";
+        assert_eq!(normalize_times(text), text);
+    }
+
+    #[test]
+    fn test_normalize_times_case_insensitive() {
+        assert_eq!(normalize_times("TEN FIFTEEN"), "10:15");
+        assert_eq!(normalize_times("Three O'Clock"), "3:00");
     }
 }

@@ -1,4 +1,4 @@
-use crate::audio_toolkit::{apply_custom_words, normalize_measurements, normalize_years};
+use crate::audio_toolkit::{apply_custom_words, normalize_measurements, normalize_times, normalize_years};
 use crate::managers::model::{EngineType, ModelManager};
 use crate::settings::{get_settings, ModelUnloadTimeout};
 use anyhow::Result;
@@ -422,16 +422,17 @@ impl TranscriptionManager {
         // Apply normalizations in sequence
         let year_normalized = normalize_years(&result.text);
         let measurement_normalized = normalize_measurements(&year_normalized);
+        let time_normalized = normalize_times(&measurement_normalized);
 
         // Then apply word correction if custom words are configured
         let corrected_result = if !settings.custom_words.is_empty() {
             apply_custom_words(
-                &measurement_normalized,
+                &time_normalized,
                 &settings.custom_words,
                 settings.word_correction_threshold,
             )
         } else {
-            measurement_normalized
+            time_normalized
         };
 
         let et = std::time::Instant::now();
